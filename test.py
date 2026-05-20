@@ -9,16 +9,18 @@ from __future__ import annotations
 import csv
 from pathlib import Path
 
+from ast_visualizer import export_ast_visualizations
 from lexical_statistical_layer import analyze_lexical_statistical_similarity
 from structural_layer import analyze_structural_similarity
 
 
-TestCase = tuple[str, str, str, str, str]
+TestCase = tuple[str, str, str, str, str, str]
 
 RESULTS_DIR = Path("results")
 CSV_OUTPUT_PATH = RESULTS_DIR / "lexical_statistical_results.csv"
 STRUCTURAL_CSV_OUTPUT_PATH = RESULTS_DIR / "structural_results.csv"
 COMBINED_CSV_OUTPUT_PATH = RESULTS_DIR / "combined_layer_results.csv"
+AST_VISUALIZATION_DIR = RESULTS_DIR / "ast_visualizations"
 
 
 TEST_CASES: list[TestCase] = [
@@ -40,6 +42,7 @@ def WEARZQ(items):
             result = result + item
     return result
 """,
+        "alta",
         "alta",
         "Debe dar similitud alta: cambian nombres, pero la estructura lexica es parecida.",
     ),
@@ -65,6 +68,7 @@ def positives(data):
     return counter
 """,
         "alta",
+        "alta",
         "Debe dar similitud alta: comentarios y docstrings se eliminan en preprocesamiento.",
     ),
     (
@@ -86,6 +90,7 @@ def sum_values_indexed(values):
     return total
 """,
         "media",
+        "media",
         "Debe quedar en similitud media: la intencion es parecida, pero cambia el flujo lexico.",
     ),
     (
@@ -104,6 +109,7 @@ def greet_user(name):
     print(message)
     return message
         """,
+        "media",
         "media",
         "Debe bajar la similitud: cambian tokens, operadores y flujo de control.",
     ),
@@ -124,6 +130,7 @@ def find_item(collection, wanted):
     return False
 """,
         "alta",
+        "alta",
         "Debe dar similitud muy alta: se conserva el mismo patron de control y retorno.",
     ),
     (
@@ -140,6 +147,7 @@ def square_numbers_compact(values):
     return [item ** 2 for item in values]
 """,
         "media",
+        "baja",
         "Debe bajar respecto a casos identicos: mismo objetivo, pero forma lexica diferente.",
     ),
     (
@@ -161,6 +169,7 @@ def filter_minors(values):
     return minors
 """,
         "alta",
+        "alta",
         "Debe mostrar similitud parcial: estructura parecida, condicion logica diferente.",
     ),
     (
@@ -173,6 +182,7 @@ def discount(price):
 def apply_tax(amount):
     return amount * 1.16
         """,
+        "alta",
         "alta",
         "Debe mantener similitud alta: los literales numericos se normalizan como LITERAL.",
     ),
@@ -191,6 +201,7 @@ def format_name(a, b):
     return a + " " + b
 """,
         "alta",
+        "alta",
         "Debe dar similitud alta pero no perfecta: tokens parecidos con orden parcialmente cambiado.",
     ),
     (
@@ -207,6 +218,7 @@ def mean(items):
     return sum(items) / len(items)
 """,
         "media",
+        "media",
         "Debe quedar en similitud media: misma idea matematica, expresion lexica mas compacta.",
     ),
     (
@@ -216,6 +228,7 @@ def mean(items):
 def identity(value):
     return value
 """,
+        "baja",
         "baja",
         "Debe dar similitud baja: un lado no aporta tokens.",
     ),
@@ -231,7 +244,14 @@ def classify_similarity(score: float) -> str:
     return "baja"
 
 
-def analyze_test_case(name: str, code_a: str, code_b: str, expected: str, note: str) -> dict[str, str | float]:
+def analyze_test_case(
+    name: str,
+    code_a: str,
+    code_b: str,
+    expected_lexical: str,
+    expected_structural: str,
+    note: str,
+) -> dict[str, str | float]:
     """Run one test case and return the metrics needed for reports."""
     lexical_results = analyze_lexical_statistical_similarity(code_a, code_b)
     structural_results = analyze_structural_similarity(code_a, code_b)
@@ -243,11 +263,12 @@ def analyze_test_case(name: str, code_a: str, code_b: str, expected: str, note: 
 
     return {
         "caso": name,
-        "similitud_esperada": expected,
+        "similitud_esperada_lexica": expected_lexical,
+        "similitud_esperada_estructural": expected_structural,
         "similitud_observada_lexica": lexical_observed,
         "similitud_observada_estructural": structural_observed,
-        "coincide_lexica": "si" if lexical_observed == expected else "no",
-        "coincide_estructural": "si" if structural_observed == expected else "no",
+        "coincide_lexica": "si" if lexical_observed == expected_lexical else "no",
+        "coincide_estructural": "si" if structural_observed == expected_structural else "no",
         "jaccard_similarity": lexical_results["jaccard_similarity"],
         "tfidf_cosine_similarity": lexical_results["tfidf_cosine_similarity"],
         "markov_similarity": lexical_results["markov_similarity"],
@@ -258,6 +279,11 @@ def analyze_test_case(name: str, code_a: str, code_b: str, expected: str, note: 
         "ast_sequence_similarity": structural_results["ast_sequence_similarity"],
         "ast_node_count_similarity": structural_results["ast_node_count_similarity"],
         "ast_depth_similarity": structural_results["ast_depth_similarity"],
+        "tree_edit_distance": structural_results["tree_edit_distance"],
+        "tree_edit_similarity": structural_results["tree_edit_similarity"],
+        "apted_available": structural_results["apted_available"],
+        "apted_tree_edit_distance": structural_results["apted_tree_edit_distance"],
+        "apted_tree_edit_similarity": structural_results["apted_tree_edit_similarity"],
         "structural_score": structural_score,
         "nota": note,
     }
@@ -277,7 +303,7 @@ def export_all_results(rows: list[dict[str, str | float]]) -> None:
     """Export lexical, structural, and combined CSV files."""
     lexical_fieldnames = [
         "caso",
-        "similitud_esperada",
+        "similitud_esperada_lexica",
         "similitud_observada_lexica",
         "coincide_lexica",
         "jaccard_similarity",
@@ -291,20 +317,26 @@ def export_all_results(rows: list[dict[str, str | float]]) -> None:
 
     structural_fieldnames = [
         "caso",
-        "similitud_esperada",
+        "similitud_esperada_estructural",
         "similitud_observada_estructural",
         "coincide_estructural",
         "ast_node_type_jaccard",
         "ast_sequence_similarity",
         "ast_node_count_similarity",
         "ast_depth_similarity",
+        "tree_edit_distance",
+        "tree_edit_similarity",
+        "apted_available",
+        "apted_tree_edit_distance",
+        "apted_tree_edit_similarity",
         "structural_score",
         "nota",
     ]
 
     combined_fieldnames = [
         "caso",
-        "similitud_esperada",
+        "similitud_esperada_lexica",
+        "similitud_esperada_estructural",
         "similitud_observada_lexica",
         "similitud_observada_estructural",
         "coincide_lexica",
@@ -319,6 +351,11 @@ def export_all_results(rows: list[dict[str, str | float]]) -> None:
         "ast_sequence_similarity",
         "ast_node_count_similarity",
         "ast_depth_similarity",
+        "tree_edit_distance",
+        "tree_edit_similarity",
+        "apted_available",
+        "apted_tree_edit_distance",
+        "apted_tree_edit_similarity",
         "structural_score",
         "nota",
     ]
@@ -328,7 +365,14 @@ def export_all_results(rows: list[dict[str, str | float]]) -> None:
     export_rows_to_csv(rows, combined_fieldnames, COMBINED_CSV_OUTPUT_PATH)
 
 
-def print_compact_report(name: str, code_a: str, code_b: str, expected: str, note: str) -> dict[str, str | float]:
+def print_compact_report(
+    name: str,
+    code_a: str,
+    code_b: str,
+    expected_lexical: str,
+    expected_structural: str,
+    note: str,
+) -> dict[str, str | float]:
     """Run one test case and print the most useful metrics."""
     lexical_results = analyze_lexical_statistical_similarity(code_a, code_b)
     structural_results = analyze_structural_similarity(code_a, code_b)
@@ -338,7 +382,8 @@ def print_compact_report(name: str, code_a: str, code_b: str, expected: str, not
     print("=" * 72)
     print(f"Caso: {name}")
     print(note)
-    print(f"Similitud esperada: {expected}")
+    print(f"Similitud esperada Capa 1: {expected_lexical}")
+    print(f"Similitud esperada Capa 2: {expected_structural}")
     print(f"Similitud observada Capa 1: {lexical_observed}")
     print(f"Similitud observada Capa 2: {structural_observed}")
     print("-" * 72)
@@ -352,6 +397,12 @@ def print_compact_report(name: str, code_a: str, code_b: str, expected: str, not
     print(f"AST secuencia:  {structural_results['ast_sequence_similarity']:.4f}")
     print(f"AST tamano:     {structural_results['ast_node_count_similarity']:.4f}")
     print(f"AST profundidad:{structural_results['ast_depth_similarity']:.4f}")
+    print(f"Tree Edit Dist: {structural_results['tree_edit_distance']}")
+    print(f"Tree Edit Sim:  {structural_results['tree_edit_similarity']:.4f}")
+    print(f"APTED activo:   {structural_results['apted_available']}")
+    if structural_results["apted_available"] == "si":
+        print(f"APTED Dist:     {structural_results['apted_tree_edit_distance']}")
+        print(f"APTED Sim:      {structural_results['apted_tree_edit_similarity']:.4f}")
     print(f"Score Capa 2:   {structural_results['structural_score']:.4f}")
     print("\nTokens normalizados A:")
     print(lexical_results["normalized_tokens_a"])
@@ -359,20 +410,31 @@ def print_compact_report(name: str, code_a: str, code_b: str, expected: str, not
     print(lexical_results["normalized_tokens_b"])
     print()
 
-    return analyze_test_case(name, code_a, code_b, expected, note)
+    return analyze_test_case(name, code_a, code_b, expected_lexical, expected_structural, note)
 
 
 def main() -> None:
     """Execute all playground cases."""
     print("Campo de pruebas: detector lexico-estadistico para codigo Python\n")
     rows = []
-    for name, code_a, code_b, expected, note in TEST_CASES:
-        rows.append(print_compact_report(name, code_a, code_b, expected, note))
+    first_code_pair: tuple[str, str, str] | None = None
+    for name, code_a, code_b, expected_lexical, expected_structural, note in TEST_CASES:
+        if first_code_pair is None:
+            first_code_pair = (name, code_a, code_b)
+        rows.append(print_compact_report(name, code_a, code_b, expected_lexical, expected_structural, note))
 
     export_all_results(rows)
     print(f"Resultados exportados a: {CSV_OUTPUT_PATH}")
     print(f"Resultados estructurales exportados a: {STRUCTURAL_CSV_OUTPUT_PATH}")
     print(f"Resultados combinados exportados a: {COMBINED_CSV_OUTPUT_PATH}")
+
+    if first_code_pair is not None:
+        _, code_a, code_b = first_code_pair
+        paths_a = export_ast_visualizations(code_a, "case_01_code_a", AST_VISUALIZATION_DIR)
+        paths_b = export_ast_visualizations(code_b, "case_01_code_b", AST_VISUALIZATION_DIR)
+        print(f"Visualizaciones AST exportadas a: {AST_VISUALIZATION_DIR}")
+        print(f"- Codigo A Mermaid: {paths_a['mermaid']}")
+        print(f"- Codigo B Mermaid: {paths_b['mermaid']}")
 
 
 if __name__ == "__main__":

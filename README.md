@@ -14,7 +14,7 @@ Codigo A y Codigo B
     -> Probabilidad de plagio
 ```
 
-En esta etapa estan implementadas una Capa 1 lexico-estadistica y una primera Capa 2 estructural basada en AST. No se implementa todavia Tree Edit Distance, embeddings, modelos semanticos, redes neuronales ni clasificador final.
+En esta etapa estan implementadas una Capa 1 lexico-estadistica y una Capa 2 estructural basada en AST. La Capa 2 ya incluye una version simple de Tree Edit Distance ordenada y soporte para APTED mediante dependencia externa. No se implementa todavia embeddings, modelos semanticos, redes neuronales ni clasificador final.
 
 ## Archivos principales
 
@@ -39,6 +39,7 @@ Al correrlo, imprime resultados en consola y exporta archivos CSV con las metric
 results/lexical_statistical_results.csv
 results/structural_results.csv
 results/combined_layer_results.csv
+results/ast_visualizations/
 ```
 
 ### `structural_layer.py`
@@ -53,7 +54,23 @@ Esta capa calcula:
 - similitud de recorrido preorden,
 - similitud de cantidad de nodos,
 - similitud de profundidad,
+- Tree Edit Distance,
+- similitud normalizada basada en Tree Edit Distance,
+- APTED Tree Edit Distance,
+- similitud normalizada basada en APTED,
 - `structural_score`.
+
+### `ast_visualizer.py`
+
+Genera visualizaciones del AST para inspeccion manual.
+
+Puede exportar:
+
+- arbol indentado en `.txt`,
+- diagrama Mermaid en `.md`,
+- grafo Graphviz DOT en `.dot`.
+
+Por defecto oculta nombres concretos de identificadores y literales para enfocarse en la estructura.
 
 ### `results/`
 
@@ -64,7 +81,10 @@ Carpeta para guardar salidas de pruebas y resultados exportados.
 Desde la carpeta del proyecto:
 
 ```bash
-python3 test.py
+python3 -m venv .env
+source .env/bin/activate
+python -m pip install -r requirements.txt
+python test.py
 ```
 
 Esto ejecuta todos los casos definidos en `TEST_CASES`, imprime un reporte compacto y genera los CSV.
@@ -72,8 +92,10 @@ Esto ejecuta todos los casos definidos en `TEST_CASES`, imprime un reporte compa
 Para verificar sintaxis:
 
 ```bash
-python3 -m py_compile lexical_statistical_layer.py structural_layer.py test.py
+python -m py_compile lexical_statistical_layer.py structural_layer.py test.py
 ```
+
+Si no se instala `apted`, el proyecto sigue corriendo con la distancia estructural interna como fallback, pero las columnas APTED indicaran que no esta disponible.
 
 ## Flujo del analizador
 
@@ -317,7 +339,7 @@ Mide si ambos codigos usan clases similares de estructuras sintacticas.
 
 Compara las secuencias de nodos AST usando `SequenceMatcher`.
 
-Esta metrica captura parcialmente el orden del recorrido del arbol. No es Tree Edit Distance, pero sirve como baseline estructural ligero.
+Esta metrica captura parcialmente el orden del recorrido del arbol.
 
 ### `ast_depth(tree: ast.AST) -> int`
 
@@ -334,6 +356,56 @@ Se usa para comparar:
 - cantidad de nodos AST,
 - profundidad del AST.
 
+### `ast_to_comparable_tree(tree: ast.AST) -> ComparableASTNode`
+
+Convierte el AST de Python en un arbol compacto e inmutable para comparacion estructural.
+
+Cada nodo conserva principalmente:
+
+- etiqueta del tipo de nodo,
+- hijos ordenados.
+
+Esto evita comparar directamente objetos internos de Python y permite aplicar distancia de edicion sobre una estructura mas simple.
+
+### `tree_edit_distance(tree_a, tree_b) -> int`
+
+Calcula una distancia de edicion ordenada entre dos arboles AST compactos.
+
+Las operaciones consideradas son:
+
+- insertar subarbol,
+- eliminar subarbol,
+- cambiar la etiqueta de un nodo.
+
+Insertar o eliminar un subarbol cuesta segun su tamano. Cambiar una etiqueta cuesta 1 si los tipos de nodo son distintos.
+
+Esta version es una implementacion sencilla con programacion dinamica. No es APTED, pero permite medir de forma mas fuerte cuantas transformaciones estructurales separan dos AST.
+
+### `tree_edit_similarity(tree_a, tree_b) -> float`
+
+Convierte la distancia de edicion en una similitud entre 0 y 1:
+
+```text
+1.0 -> arboles muy parecidos o identicos
+0.0 -> arboles muy diferentes segun la distancia normalizada
+```
+
+La normalizacion usa el tamano del arbol mas grande para que el resultado sea comparable entre ejemplos.
+
+### `apted_tree_edit_distance(tree_a, tree_b) -> int | None`
+
+Calcula Tree Edit Distance usando la libreria externa `apted` cuando esta instalada.
+
+APTED es un algoritmo especializado para distancia de edicion entre arboles. En este proyecto se aplica sobre el arbol AST compacto generado por `ast_to_comparable_tree`.
+
+Si la dependencia no esta disponible, devuelve `None` y el analisis estructural sigue funcionando con la distancia interna.
+
+### `apted_tree_edit_similarity(tree_a, tree_b) -> float | None`
+
+Convierte la distancia APTED en una similitud normalizada entre 0 y 1.
+
+Cuando APTED esta disponible, esta similitud se usa como componente principal del `structural_score`. Cuando no esta disponible, se usa como fallback la similitud estructural interna.
+
 ### `analyze_structural_similarity(code_a, code_b) -> dict`
 
 Ejecuta toda la Capa 2:
@@ -345,19 +417,59 @@ Ejecuta toda la Capa 2:
 5. Calcula similitud de secuencia AST.
 6. Calcula similitud de cantidad de nodos.
 7. Calcula similitud de profundidad.
-8. Fusiona el `structural_score`.
+8. Calcula Tree Edit Distance.
+9. Calcula similitud normalizada de Tree Edit Distance.
+10. Calcula APTED Tree Edit Distance si la dependencia esta instalada.
+11. Calcula similitud normalizada basada en APTED.
+12. Fusiona el `structural_score`.
 
 La fusion inicial es:
 
 ```python
 structural_score =
-    0.35 * ast_node_type_jaccard
-  + 0.35 * ast_sequence_similarity
+    0.30 * apted_tree_edit_similarity
+  + 0.25 * ast_sequence_similarity
+  + 0.20 * ast_node_type_jaccard
   + 0.15 * ast_node_count_similarity
-  + 0.15 * ast_depth_similarity
+  + 0.10 * ast_depth_similarity
 ```
 
+Si APTED no esta instalado, el primer termino usa `tree_edit_similarity` como fallback.
+
 Este score representa parecido estructural, no similitud semantica.
+
+## Visualizacion del AST
+
+El archivo `ast_visualizer.py` permite convertir codigo Python en representaciones visuales del AST.
+
+Uso directo:
+
+```bash
+source .env/bin/activate
+python ast_visualizer.py
+```
+
+Esto genera archivos en:
+
+```text
+results/ast_visualizations/
+```
+
+Formatos generados:
+
+- `.txt`: arbol indentado facil de leer en consola.
+- `.md`: diagrama Mermaid para ver en visores Markdown compatibles.
+- `.dot`: archivo Graphviz para renderizar como imagen si se tiene Graphviz instalado.
+
+Tambien se puede usar desde codigo:
+
+```python
+from ast_visualizer import export_ast_visualizations
+
+export_ast_visualizations(code, "example")
+```
+
+Por defecto, la visualizacion muestra tipos de nodos como `FunctionDef`, `For`, `If`, `Return`, `BinOp` o `Compare`, pero no muestra nombres concretos de variables ni literales. Esto ayuda a inspeccionar la estructura sin depender de renombramientos superficiales.
 
 ## Metricas calculadas
 
@@ -429,6 +541,22 @@ Compara el tamano de ambos arboles segun su cantidad de nodos.
 
 Compara la profundidad maxima de ambos arboles.
 
+### Tree Edit Distance
+
+Mide cuantas operaciones estructurales se necesitan para transformar un AST compacto en otro.
+
+### Tree Edit similarity
+
+Convierte la distancia de edicion en una similitud normalizada entre 0 y 1.
+
+### APTED Tree Edit Distance
+
+Mide distancia de edicion entre arboles usando el algoritmo APTED cuando la dependencia esta instalada.
+
+### APTED Tree Edit similarity
+
+Convierte la distancia APTED en una similitud normalizada entre 0 y 1.
+
 ### Structural score
 
 Fusiona las metricas estructurales en un valor entre 0 y 1.
@@ -458,7 +586,7 @@ results/combined_layer_results.csv
 Columnas principales del CSV lexico:
 
 - `caso`,
-- `similitud_esperada`,
+- `similitud_esperada_lexica`,
 - `similitud_observada_lexica`,
 - `coincide_lexica`,
 - `jaccard_similarity`,
@@ -472,13 +600,18 @@ Columnas principales del CSV lexico:
 Columnas principales del CSV estructural:
 
 - `caso`,
-- `similitud_esperada`,
+- `similitud_esperada_estructural`,
 - `similitud_observada_estructural`,
 - `coincide_estructural`,
 - `ast_node_type_jaccard`,
 - `ast_sequence_similarity`,
 - `ast_node_count_similarity`,
 - `ast_depth_similarity`,
+- `tree_edit_distance`,
+- `tree_edit_similarity`,
+- `apted_available`,
+- `apted_tree_edit_distance`,
+- `apted_tree_edit_similarity`,
 - `structural_score`,
 - `nota`.
 
@@ -486,9 +619,9 @@ El CSV combinado reune ambas capas en una sola tabla. Estos archivos sirven para
 
 ## Limitaciones actuales
 
-1. La Capa 2 estructural es todavia un baseline.
+1. La Capa 2 estructural sigue siendo perfectible.
 
-Ya existe comparacion AST, pero no usa Tree Edit Distance ni APTED. Compara rasgos estructurales simples: tipos de nodos, recorrido, cantidad de nodos y profundidad.
+Ya existe comparacion AST, una version simple de Tree Edit Distance y soporte para APTED. Aun asi, el metodo sigue siendo perfectible porque no compara significado ni equivalencia algoritmica profunda.
 
 2. No hay analisis semantico.
 
