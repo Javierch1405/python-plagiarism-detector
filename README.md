@@ -14,7 +14,7 @@ Codigo A y Codigo B
     -> Probabilidad de plagio
 ```
 
-En esta etapa estan implementadas una Capa 1 lexico-estadistica y una Capa 2 estructural basada en AST. La Capa 2 ya incluye una version simple de Tree Edit Distance ordenada y soporte para APTED mediante dependencia externa. No se implementa todavia embeddings, modelos semanticos, redes neuronales ni clasificador final.
+En esta etapa estan implementadas una Capa 1 lexico-estadistica, una Capa 2 estructural basada en AST y una primera Capa 3 experimental basada en ejecucion controlada de funciones. La Capa 2 ya incluye una version simple de Tree Edit Distance ordenada y soporte para APTED mediante dependencia externa. No se implementa todavia embeddings, modelos semanticos pesados, redes neuronales ni clasificador final.
 
 ## Archivos principales
 
@@ -38,6 +38,7 @@ Al correrlo, imprime resultados en consola y exporta archivos CSV con las metric
 ```text
 results/lexical_statistical_results.csv
 results/structural_results.csv
+results/semantic_results.csv
 results/combined_layer_results.csv
 results/ast_visualizations/
 ```
@@ -72,6 +73,21 @@ Puede exportar:
 
 Por defecto oculta nombres concretos de identificadores y literales para enfocarse en la estructura.
 
+### `semantic_layer.py`
+
+Contiene una primera version de analisis semantico por comportamiento.
+
+Esta capa:
+
+- detecta la primera funcion definida en cada fragmento,
+- elige una aridad comparable,
+- genera inputs controlados,
+- ejecuta ambas funciones en subprocess con timeout,
+- compara salidas y excepciones,
+- calcula `semantic_score`.
+
+No usa embeddings ni modelos pesados. Tampoco ejecuta el codigo dentro del proceso principal.
+
 ### `results/`
 
 Carpeta para guardar salidas de pruebas y resultados exportados.
@@ -92,7 +108,7 @@ Esto ejecuta todos los casos definidos en `TEST_CASES`, imprime un reporte compa
 Para verificar sintaxis:
 
 ```bash
-python -m py_compile lexical_statistical_layer.py structural_layer.py test.py
+python -m py_compile lexical_statistical_layer.py structural_layer.py semantic_layer.py ast_visualizer.py test.py
 ```
 
 Si no se instala `apted`, el proyecto sigue corriendo con la distancia estructural interna como fallback, pero las columnas APTED indicaran que no esta disponible.
@@ -104,20 +120,19 @@ El flujo actual es:
 ```text
 Codigo A y Codigo B
     -> preprocess_code
-    -> tokenize_code
-    -> normalize_tokens
-    -> metricas lexicas/estadisticas
-    -> lexical_statistical_score
-    -> parse_python_ast
-    -> metricas estructurales AST
-    -> structural_score
+    -> codigo limpio A y codigo limpio B
+        -> Capa 1: tokenize_code -> normalize_tokens -> metricas lexicas/estadisticas -> lexical_statistical_score
+        -> Capa 2: parse_python_ast -> metricas estructurales AST -> structural_score
+        -> Capa 3: ejecucion controlada de funciones -> semantic_score
 ```
 
 La separacion es importante:
 
 - `preprocess_code` solo limpia codigo.
+- En el flujo integrado de `test.py`, `run_layers_once` ejecuta el preprocesamiento una sola vez por par de codigos y entrega ese codigo limpio a las capas.
 - `normalize_tokens` pertenece a la Capa 1 porque afecta directamente las metricas de similitud.
 - `parse_python_ast` pertenece a la Capa 2 porque ya analiza estructura sintactica, no solo tokens.
+- `analyze_semantic_similarity` pertenece a la Capa 3 porque compara comportamiento observable con inputs de prueba.
 
 ## Documentacion de funciones
 
@@ -471,6 +486,64 @@ export_ast_visualizations(code, "example")
 
 Por defecto, la visualizacion muestra tipos de nodos como `FunctionDef`, `For`, `If`, `Return`, `BinOp` o `Compare`, pero no muestra nombres concretos de variables ni literales. Esto ayuda a inspeccionar la estructura sin depender de renombramientos superficiales.
 
+## Analisis semantico por ejecucion
+
+El archivo `semantic_layer.py` compara el comportamiento observable de dos funciones.
+
+El flujo es:
+
+```text
+codigo A y codigo B
+    -> detectar primera funcion
+    -> elegir aridad comparable
+    -> generar inputs controlados
+    -> ejecutar cada funcion en subprocess
+    -> comparar outputs
+    -> semantic_score
+```
+
+Funciones principales:
+
+### `extract_first_function_info(code: str) -> FunctionInfo | None`
+
+Extrae nombre y numero de argumentos de la primera funcion definida en el codigo.
+
+### `choose_comparable_arity(function_a, function_b) -> int | None`
+
+Elige una cantidad de argumentos que ambas funciones puedan recibir.
+
+### `generate_test_inputs(arity: int) -> list[tuple[Any, ...]]`
+
+Genera inputs deterministas para probar funciones pequenas.
+
+### `execute_function_once(code, function_name, args, timeout_seconds) -> dict`
+
+Ejecuta una llamada en un subprocess con timeout. El resultado puede ser:
+
+- retorno normal,
+- excepcion,
+- timeout,
+- error del runner.
+
+### `compare_execution_results(executions) -> dict`
+
+Resume los resultados:
+
+- cantidad de casos,
+- casos donde ambas funciones retornaron,
+- retornos iguales,
+- excepciones iguales,
+- similitud de outputs,
+- cobertura de ejecucion exitosa.
+
+### `analyze_semantic_similarity(code_a, code_b) -> dict`
+
+Ejecuta todo el analisis semantico por comportamiento y devuelve `semantic_score`.
+
+Esta capa es util para detectar casos donde la estructura cambia, pero el comportamiento se conserva, por ejemplo un ciclo `for` contra una list comprehension.
+
+Limitacion importante: ejecutar codigo de terceros siempre tiene riesgos. Esta version usa subprocess, timeout y builtins limitados, pero no debe considerarse un sandbox de seguridad fuerte.
+
 ## Metricas calculadas
 
 ### Similitud Jaccard
@@ -580,6 +653,7 @@ Estos umbrales estan implementados en `test.py` mediante `classify_similarity`.
 ```text
 results/lexical_statistical_results.csv
 results/structural_results.csv
+results/semantic_results.csv
 results/combined_layer_results.csv
 ```
 
@@ -615,7 +689,26 @@ Columnas principales del CSV estructural:
 - `structural_score`,
 - `nota`.
 
-El CSV combinado reune ambas capas en una sola tabla. Estos archivos sirven para que otra persona pueda corroborar los resultados y discutir si las metricas, pesos o umbrales deben ajustarse.
+Columnas principales del CSV semantico:
+
+- `caso`,
+- `similitud_esperada_semantica`,
+- `similitud_observada_semantica`,
+- `coincide_semantica`,
+- `semantic_runnable`,
+- `semantic_reason`,
+- `semantic_function_a`,
+- `semantic_function_b`,
+- `semantic_tested_arity`,
+- `semantic_total_cases`,
+- `semantic_both_return_count`,
+- `semantic_matching_return_count`,
+- `semantic_successful_overlap`,
+- `semantic_output_similarity`,
+- `semantic_score`,
+- `nota`.
+
+El CSV combinado reune las tres capas en una sola tabla. Estos archivos sirven para que otra persona pueda corroborar los resultados y discutir si las metricas, pesos o umbrales deben ajustarse.
 
 ## Limitaciones actuales
 
@@ -623,9 +716,9 @@ El CSV combinado reune ambas capas en una sola tabla. Estos archivos sirven para
 
 Ya existe comparacion AST, una version simple de Tree Edit Distance y soporte para APTED. Aun asi, el metodo sigue siendo perfectible porque no compara significado ni equivalencia algoritmica profunda.
 
-2. No hay analisis semantico.
+2. El analisis semantico actual es experimental.
 
-El sistema no entiende significado, intencion ni equivalencia algoritmica profunda.
+Ya existe una primera comparacion por ejecucion controlada de funciones, pero no equivale a entender significado, intencion ni equivalencia algoritmica profunda. Depende de los inputs generados y debe revisarse junto con `semantic_successful_overlap`.
 
 3. La normalizacion puede ocultar diferencias relevantes.
 
@@ -662,10 +755,10 @@ Codigos semanticamente equivalentes, pero escritos con estructuras muy diferente
 
 ## Siguiente paso recomendado
 
-Despues de validar Capa 1 y Capa 2 con los CSV, el siguiente paso natural es crear una fusion inicial entre ambas capas:
+Despues de validar las metricas actuales con los CSV, el siguiente paso natural es crear una fusion inicial entre puntajes:
 
 ```text
-lexical_statistical_score + structural_score -> combined_score
+lexical_statistical_score + structural_score + semantic_score -> combined_score
 ```
 
 Esa fusion todavia puede ser ponderada y transparente, sin clasificador entrenado.
@@ -684,4 +777,4 @@ Mas adelante, si existe un conjunto etiquetado, esos scores pueden alimentar un 
 
 ## Frase para defender el prototipo
 
-Este prototipo implementa dos capas explicables y ligeras para comparar codigo Python. La Capa 1 limpia, tokeniza y normaliza codigo para calcular metricas lexicas y estadisticas. La Capa 2 parsea el codigo con AST y compara rasgos estructurales como tipos de nodos, recorrido, tamano y profundidad. No pretende resolver por completo el plagio; funciona como base defendible para extender despues hacia fusion de capas, analisis semantico y validacion con datos etiquetados.
+Este prototipo implementa capas explicables y ligeras para comparar codigo Python. La Capa 1 limpia, tokeniza y normaliza codigo para calcular metricas lexicas y estadisticas. La Capa 2 parsea el codigo con AST y compara rasgos estructurales como tipos de nodos, recorrido, tamano y profundidad. La Capa 3 actual compara comportamiento observable mediante ejecucion controlada de funciones. No pretende resolver por completo el plagio; funciona como base defendible para extender despues hacia embeddings, fusion de puntajes y validacion con datos etiquetados.

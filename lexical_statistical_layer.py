@@ -340,10 +340,14 @@ def compare_markov_matrices(matrix_a: TransitionMatrix, matrix_b: TransitionMatr
     return max(0.0, min(1.0, 1.0 - average_distance))
 
 
-def analyze_lexical_statistical_similarity(code_a: str, code_b: str) -> dict[str, Any]:
-    """Run preprocessing and all Layer-1 lexical/statistical metrics."""
-    clean_code_a = preprocess_code(code_a)
-    clean_code_b = preprocess_code(code_b)
+def analyze_lexical_statistical_similarity(
+    code_a: str,
+    code_b: str,
+    preprocessed: bool = False,
+) -> dict[str, Any]:
+    """Run Layer-1 lexical/statistical metrics over raw or clean code."""
+    clean_code_a = code_a if preprocessed else preprocess_code(code_a)
+    clean_code_b = code_b if preprocessed else preprocess_code(code_b)
 
     tokens_a = tokenize_code(clean_code_a)
     tokens_b = tokenize_code(clean_code_b)
@@ -423,24 +427,6 @@ def print_analysis_report(results: dict[str, Any]) -> None:
     print("- Este score no es una probabilidad final de plagio; solo representa la Capa 1.")
 
 
-def explain_future_integration() -> None:
-    """Explain how Layer 1 can connect with later research stages."""
-    print("\n=== Conexion futura con la arquitectura completa ===")
-    print(
-        "En etapas posteriores, lexical_statistical_score puede combinarse con score_AST "
-        "(Capa 2 estructural) y score_semantico (Capa 3 semantica)."
-    )
-    print(
-        "La fusion final podria iniciar como una suma ponderada transparente, por ejemplo: "
-        "0.30 * score_lexico + 0.40 * score_AST + 0.30 * score_semantico."
-    )
-    print(
-        "Cuando exista un conjunto etiquetado de pares de codigo, esos puntajes pueden usarse "
-        "como variables de entrada para un clasificador supervisado que estime la probabilidad "
-        "final de plagio."
-    )
-
-
 if __name__ == "__main__":
     code_a = '''
 def sum_even_numbers(values):
@@ -464,4 +450,3 @@ def add_pairs(items):
 
     analysis = analyze_lexical_statistical_similarity(code_a, code_b)
     print_analysis_report(analysis)
-    explain_future_integration()

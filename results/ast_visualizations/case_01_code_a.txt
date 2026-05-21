@@ -16,9 +16,11 @@
             - Constant
           - Eq
           - Constant
-        - AugAssign
+        - Assign
           - Name
-          - Add
-          - Name
+          - BinOp
+            - Name
+            - Add
+            - Name
     - Return
       - Name

@@ -58,12 +58,12 @@ else:
     ASTAptedConfig = None
 
 
-def parse_python_ast(code: str) -> ast.AST:
-    """Preprocess Python code and parse it into an AST."""
+def parse_python_ast(code: str, preprocessed: bool = False) -> ast.AST:
+    """Parse raw or preprocessed Python code into an AST."""
     if not isinstance(code, str):
         raise TypeError("code must be a string")
 
-    clean_code = preprocess_code(code)
+    clean_code = code if preprocessed else preprocess_code(code)
     if not clean_code:
         return ast.Module(body=[], type_ignores=[])
 
@@ -250,10 +250,14 @@ def apted_tree_edit_similarity(tree_a: ComparableASTNode, tree_b: ComparableASTN
     return max(0.0, min(1.0, similarity))
 
 
-def analyze_structural_similarity(code_a: str, code_b: str) -> dict[str, Any]:
+def analyze_structural_similarity(
+    code_a: str,
+    code_b: str,
+    preprocessed: bool = False,
+) -> dict[str, Any]:
     """Run Layer-2 AST-based structural similarity metrics."""
-    tree_a = parse_python_ast(code_a)
-    tree_b = parse_python_ast(code_b)
+    tree_a = parse_python_ast(code_a, preprocessed=preprocessed)
+    tree_b = parse_python_ast(code_b, preprocessed=preprocessed)
     comparable_tree_a = ast_to_comparable_tree(tree_a)
     comparable_tree_b = ast_to_comparable_tree(tree_b)
 
