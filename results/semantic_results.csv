@@ -1,5 +1,5 @@
 caso,similitud_esperada_semantica,similitud_observada_semantica,coincide_semantica,semantic_runnable,semantic_reason,semantic_function_a,semantic_function_b,semantic_tested_arity,semantic_total_cases,semantic_both_return_count,semantic_matching_return_count,semantic_successful_overlap,semantic_output_similarity,semantic_score,nota
-Misma logica con nombres cambiados,alta,alta,si,si,ok,sum_even_numbers,WEARZQ,1,10,4,4,0.4,1.0,1.0,"Debe dar similitud alta: cambian nombres, pero la estructura lexica es parecida."
+Misma logica con nombres cambiados,alta,alta,si,si,ok,sum_even_numbers,WEARZQ,1,10,3,3,0.3,1.0,1.0,"Debe dar similitud alta: cambian nombres, pero la estructura lexica es parecida."
 Misma logica con comentarios y docstrings diferentes,alta,alta,si,si,ok,count_positive,positives,1,10,4,4,0.4,1.0,1.0,Debe dar similitud alta: comentarios y docstrings se eliminan en preprocesamiento.
 Mismo patron con while en lugar de for,alta,alta,si,si,ok,sum_values,sum_values_indexed,1,10,4,4,0.4,1.0,1.0,"Debe quedar en similitud media: la intencion es parecida, pero cambia el flujo lexico."
 Codigo distinto,baja,baja,si,si,ok,factorial,greet_user,1,10,0,0,0.0,0.0,0.25,"Debe bajar la similitud: cambian tokens, operadores y flujo de control."

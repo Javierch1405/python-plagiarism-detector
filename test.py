@@ -10,9 +10,11 @@ import csv
 from pathlib import Path
 
 from ast_visualizer import export_ast_visualizations
+from embeddings import analyze_embedding_similarity, print_embedding_report
 from lexical_statistical_layer import analyze_lexical_statistical_similarity, preprocess_code
 from semantic_layer import analyze_semantic_similarity
 from structural_layer import analyze_structural_similarity
+from string_prefilter import analyze_string_prefilter, print_string_prefilter_report
 
 
 TestCase = tuple[str, str, str, str, str, str, str]
@@ -21,6 +23,7 @@ RESULTS_DIR = Path("results")
 CSV_OUTPUT_PATH = RESULTS_DIR / "lexical_statistical_results.csv"
 STRUCTURAL_CSV_OUTPUT_PATH = RESULTS_DIR / "structural_results.csv"
 SEMANTIC_CSV_OUTPUT_PATH = RESULTS_DIR / "semantic_results.csv"
+EMBEDDING_CSV_OUTPUT_PATH = RESULTS_DIR / "embedding_results.csv"
 COMBINED_CSV_OUTPUT_PATH = RESULTS_DIR / "combined_layer_results.csv"
 AST_VISUALIZATION_DIR = RESULTS_DIR / "ast_visualizations"
 
@@ -257,7 +260,7 @@ def classify_similarity(score: float) -> str:
     return "baja"
 
 
-def run_layers_once(code_a: str, code_b: str) -> tuple[dict[str, object], dict[str, object], dict[str, object]]:
+def run_layers_once(code_a: str, code_b: str) -> tuple[dict[str, object], dict[str, object], dict[str, object], dict[str, object]]:
     """Preprocess a code pair once and run every analysis layer."""
     clean_code_a = preprocess_code(code_a)
     clean_code_b = preprocess_code(code_b)
@@ -265,8 +268,9 @@ def run_layers_once(code_a: str, code_b: str) -> tuple[dict[str, object], dict[s
     lexical_results = analyze_lexical_statistical_similarity(clean_code_a, clean_code_b, preprocessed=True)
     structural_results = analyze_structural_similarity(clean_code_a, clean_code_b, preprocessed=True)
     semantic_results = analyze_semantic_similarity(clean_code_a, clean_code_b, preprocessed=True)
+    embedding_results = analyze_embedding_similarity(clean_code_a, clean_code_b, preprocessed=True)
 
-    return lexical_results, structural_results, semantic_results
+    return lexical_results, structural_results, semantic_results, embedding_results
 
 
 def build_result_row(
@@ -278,6 +282,8 @@ def build_result_row(
     lexical_results: dict[str, object],
     structural_results: dict[str, object],
     semantic_results: dict[str, object],
+    embedding_results: dict[str, object],
+    string_results: dict[str, object],
 ) -> dict[str, str | float]:
     """Build the CSV/report row from already computed layer results."""
     lexical_score = float(lexical_results["lexical_statistical_score"])
@@ -304,6 +310,8 @@ def build_result_row(
         "kl_divergence_a_to_b": float(lexical_results["kl_divergence_a_to_b"]),
         "kl_divergence_b_to_a": float(lexical_results["kl_divergence_b_to_a"]),
         "lexical_statistical_score": lexical_score,
+        "string_exact_match": string_results.get("exact_match", False),
+        "string_similarity_ratio": float(string_results.get("similarity_ratio", 0.0)),
         "ast_node_type_jaccard": float(structural_results["ast_node_type_jaccard"]),
         "ast_sequence_similarity": float(structural_results["ast_sequence_similarity"]),
         "ast_node_count_similarity": float(structural_results["ast_node_count_similarity"]),
@@ -325,6 +333,10 @@ def build_result_row(
         "semantic_successful_overlap": semantic_results.get("successful_overlap", 0.0),
         "semantic_output_similarity": semantic_results.get("output_similarity", 0.0),
         "semantic_score": semantic_score,
+        "embedding_model": embedding_results.get("embedding_model", "tfidf"),
+        "embedding_feature_count": int(embedding_results.get("embedding_feature_count", 0)),
+        "embedding_cosine_similarity": float(embedding_results.get("embedding_cosine_similarity", 0.0)),
+        "embedding_score": float(embedding_results.get("embedding_score", 0.0)),
         "nota": note,
     }
 
@@ -346,6 +358,8 @@ def export_all_results(rows: list[dict[str, str | float]]) -> None:
         "similitud_esperada_lexica",
         "similitud_observada_lexica",
         "coincide_lexica",
+        "string_exact_match",
+        "string_similarity_ratio",
         "jaccard_similarity",
         "tfidf_cosine_similarity",
         "markov_similarity",
@@ -392,6 +406,15 @@ def export_all_results(rows: list[dict[str, str | float]]) -> None:
         "nota",
     ]
 
+    embedding_fieldnames = [
+        "caso",
+        "embedding_model",
+        "embedding_feature_count",
+        "embedding_cosine_similarity",
+        "embedding_score",
+        "nota",
+    ]
+
     combined_fieldnames = [
         "caso",
         "similitud_esperada_lexica",
@@ -403,6 +426,8 @@ def export_all_results(rows: list[dict[str, str | float]]) -> None:
         "coincide_lexica",
         "coincide_estructural",
         "coincide_semantica",
+        "string_exact_match",
+        "string_similarity_ratio",
         "jaccard_similarity",
         "tfidf_cosine_similarity",
         "markov_similarity",
@@ -424,12 +449,17 @@ def export_all_results(rows: list[dict[str, str | float]]) -> None:
         "semantic_output_similarity",
         "semantic_successful_overlap",
         "semantic_score",
+        "embedding_model",
+        "embedding_feature_count",
+        "embedding_cosine_similarity",
+        "embedding_score",
         "nota",
     ]
 
     export_rows_to_csv(rows, lexical_fieldnames, CSV_OUTPUT_PATH)
     export_rows_to_csv(rows, structural_fieldnames, STRUCTURAL_CSV_OUTPUT_PATH)
     export_rows_to_csv(rows, semantic_fieldnames, SEMANTIC_CSV_OUTPUT_PATH)
+    export_rows_to_csv(rows, embedding_fieldnames, EMBEDDING_CSV_OUTPUT_PATH)
     export_rows_to_csv(rows, combined_fieldnames, COMBINED_CSV_OUTPUT_PATH)
 
 
@@ -443,7 +473,12 @@ def print_compact_report(
     note: str,
 ) -> dict[str, str | float]:
     """Run one test case and print the most useful metrics."""
-    lexical_results, structural_results, semantic_results = run_layers_once(code_a, code_b)
+    # Preprocess and run layers
+    clean_code_a = preprocess_code(code_a)
+    clean_code_b = preprocess_code(code_b)
+
+    lexical_results, structural_results, semantic_results, embedding_results = run_layers_once(code_a, code_b)
+    string_results = analyze_string_prefilter(clean_code_a, clean_code_b, threshold=0.98, preprocessed=True)
     lexical_observed = classify_similarity(lexical_results["lexical_statistical_score"])
     structural_observed = classify_similarity(structural_results["structural_score"])
     semantic_observed = classify_similarity(semantic_results["semantic_score"])
@@ -479,6 +514,11 @@ def print_compact_report(
     print(f"Output Sim:     {semantic_results.get('output_similarity', 0.0):.4f}")
     print(f"Overlap exito:  {semantic_results.get('successful_overlap', 0.0):.4f}")
     print(f"Score Capa 3:   {semantic_results['semantic_score']:.4f}")
+    print()
+    # Prefiltro Tipo 1
+    print_string_prefilter_report(string_results)
+    print()
+    print_embedding_report(embedding_results)
     print("\nTokens normalizados A:")
     print(lexical_results["normalized_tokens_a"])
     print("\nTokens normalizados B:")
@@ -494,6 +534,8 @@ def print_compact_report(
         lexical_results,
         structural_results,
         semantic_results,
+        embedding_results,
+        string_results,
     )
 
 
@@ -511,6 +553,7 @@ def main() -> None:
     print(f"Resultados exportados a: {CSV_OUTPUT_PATH}")
     print(f"Resultados estructurales exportados a: {STRUCTURAL_CSV_OUTPUT_PATH}")
     print(f"Resultados semanticos exportados a: {SEMANTIC_CSV_OUTPUT_PATH}")
+    print(f"Resultados de embeddings exportados a: {EMBEDDING_CSV_OUTPUT_PATH}")
     print(f"Resultados combinados exportados a: {COMBINED_CSV_OUTPUT_PATH}")
 
     if first_code_pair is not None:
