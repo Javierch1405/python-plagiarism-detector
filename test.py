@@ -478,7 +478,7 @@ def print_compact_report(
     clean_code_b = preprocess_code(code_b)
 
     lexical_results, structural_results, semantic_results, embedding_results = run_layers_once(code_a, code_b)
-    string_results = analyze_string_prefilter(clean_code_a, clean_code_b, threshold=0.98, preprocessed=True)
+    string_results = analyze_string_prefilter(code_a, code_b, threshold=0.98)
     lexical_observed = classify_similarity(lexical_results["lexical_statistical_score"])
     structural_observed = classify_similarity(structural_results["structural_score"])
     semantic_observed = classify_similarity(semantic_results["semantic_score"])

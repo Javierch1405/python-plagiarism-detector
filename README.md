@@ -6,7 +6,7 @@ La arquitectura general propuesta es por capas:
 
 ```text
 Codigo A y Codigo B
-    -> Preprocesamiento
+    -> Capa 0: Preprocesamiento y prefiltro de strings
     -> Capa 1: Lexica-estadistica
     -> Capa 2: Estructural
     -> Capa 3: Semantica
@@ -14,7 +14,7 @@ Codigo A y Codigo B
     -> Probabilidad de plagio
 ```
 
-En esta etapa estan implementadas una Capa 1 lexico-estadistica, una Capa 2 estructural basada en AST y una primera Capa 3 experimental basada en ejecucion controlada de funciones. La Capa 2 ya incluye una version simple de Tree Edit Distance ordenada y soporte para APTED mediante dependencia externa. No se implementa todavia embeddings, modelos semanticos pesados, redes neuronales ni clasificador final.
+En esta etapa estan implementadas una Capa 0 de preprocesamiento y prefiltro de strings para detectar clones Type-1 casi exactos, una Capa 1 lexico-estadistica, una Capa 2 estructural basada en AST y una primera Capa 3 experimental. La Capa 3 puede arrancar con embeddings de codigo y similitud coseno como aproximacion semantica inicial, mientras que en una evolucion posterior puede incorporar ejecucion controlada de funciones. La Capa 2 ya incluye una version simple de Tree Edit Distance ordenada y soporte para APTED mediante dependencia externa. No se implementan todavia modelos semanticos pesados, redes neuronales ni clasificador final.
 
 ## Archivos principales
 
@@ -28,6 +28,29 @@ Contiene el motor del analizador. Es el archivo donde viven las funciones reutil
 - calculo de metricas lexicas y estadisticas,
 - comparacion de patrones de transicion,
 - fusion inicial del score de Capa 1.
+
+### `string_prefilter.py`
+
+Contiene la Capa 0 de preprocesamiento y prefiltro de strings. Su objetivo es limpiar el codigo y descartar muy rapido copias casi exactas antes de pasar a las capas mas costosas.
+
+Esta capa:
+
+- preprocesa el codigo eliminando comentarios, docstrings y whitespaces innecesarios,
+- normaliza el texto resultante para comparacion,
+- compara igualdad exacta tras normalizacion,
+- calcula un ratio de similitud basado en `SequenceMatcher`,
+- marca pares como duplicados cercanos cuando superan un umbral.
+
+### `embeddings.py`
+
+Contiene una primera version de la Capa 3 basada en embeddings ligeros de TF-IDF.
+
+Esta capa:
+
+- transforma el codigo limpio en una secuencia de tokens normalizados,
+- vectoriza ese texto con `TfidfVectorizer`,
+- compara ambos fragmentos con similitud coseno,
+- devuelve un `embedding_score` reutilizable como aproximacion semantica inicial.
 
 ### `test.py`
 
@@ -75,7 +98,7 @@ Por defecto oculta nombres concretos de identificadores y literales para enfocar
 
 ### `semantic_layer.py`
 
-Contiene una primera version de analisis semantico por comportamiento.
+Contiene una version experimental de analisis semantico por comportamiento.
 
 Esta capa:
 
@@ -86,7 +109,7 @@ Esta capa:
 - compara salidas y excepciones,
 - calcula `semantic_score`.
 
-No usa embeddings ni modelos pesados. Tampoco ejecuta el codigo dentro del proceso principal.
+Esta version convive con la capa de embeddings, que sirve como primer aproximador semantico barato antes de ejecutar codigo. La version de comportamiento no usa modelos pesados ni ejecuta el codigo dentro del proceso principal.
 
 ### `results/`
 
@@ -119,11 +142,11 @@ El flujo actual es:
 
 ```text
 Codigo A y Codigo B
-    -> preprocess_code
-    -> codigo limpio A y codigo limpio B
+    -> Capa 0: preprocess_code -> similarity_ratio -> descarte temprano de clones Type-1
         -> Capa 1: tokenize_code -> normalize_tokens -> metricas lexicas/estadisticas -> lexical_statistical_score
         -> Capa 2: parse_python_ast -> metricas estructurales AST -> structural_score
-        -> Capa 3: ejecucion controlada de funciones -> semantic_score
+        -> Capa 3: embeddings TF-IDF -> similitud coseno -> embedding_score
+        -> Capa 3 experimental: ejecucion controlada de funciones -> semantic_score
 ```
 
 Diagrama detallado del flujo de ejecucion:

@@ -1,11 +1,10 @@
-"""Capa previa para detectar duplicados tipo 1 (copias casi exactas).
+"""Capa 0 para detectar duplicados tipo 1 (copias casi exactas).
 
-Esta capa normaliza el texto (quita comentarios/docstrings mediante
-`preprocess_code`, colapsa espacios y líneas vacías) y proporciona
-comparadores rápidos: igualdad exacta y 'similarity ratio' basada en
-`difflib.SequenceMatcher`.
+Esta capa preprocesa el codigo fuente: elimina comentarios, docstrings y
+whitespaces innecesarios, y despues aplica comparaciones rapidas para
+descartar clones casi exactos antes de pasar a las capas mas costosas.
 
-No pretende sustituir otras capas; es una eliminación rápida de
+No pretende sustituir otras capas; es una eliminacion temprana de
 candidatos obvios para ahorrar trabajo a las etapas posteriores.
 """
 
@@ -18,13 +17,13 @@ from typing import Tuple, Any
 from lexical_statistical_layer import preprocess_code
 
 
-def normalize_for_type1(code: str, preprocessed: bool = False) -> str:
-    """Normaliza `code` para detección Type-1.
+def preprocess_for_type1(code: str, preprocessed: bool = False) -> str:
+    """Preprocesa `code` para deteccion Type-1.
 
     - Si `preprocessed` es False, llama a `preprocess_code` para quitar
-      comentarios y docstrings.
-    - Elimina líneas en blanco, recorta espacios por línea y colapsa
-      secuencias de whitespace en un solo espacio.
+        comentarios, docstrings y normalizar espacios base.
+    - Elimina lineas en blanco, recorta espacios por linea y colapsa
+        secuencias de whitespace en un solo espacio.
     - Devuelve una cadena compacta y estable para comparar.
     """
     if not isinstance(code, str):
@@ -41,7 +40,7 @@ def normalize_for_type1(code: str, preprocessed: bool = False) -> str:
 
 def exact_match(code_a: str, code_b: str, preprocessed: bool = False) -> bool:
     """Devuelve True si las versiones normalizadas son idénticas."""
-    return normalize_for_type1(code_a, preprocessed) == normalize_for_type1(code_b, preprocessed)
+    return preprocess_for_type1(code_a, preprocessed) == preprocess_for_type1(code_b, preprocessed)
 
 
 def similarity_ratio(code_a: str, code_b: str, preprocessed: bool = False) -> float:
@@ -50,8 +49,8 @@ def similarity_ratio(code_a: str, code_b: str, preprocessed: bool = False) -> fl
     Es rápido y suficiente para detectar copias casi exactas; para búsquedas
     a gran escala se podría usar shingling/minhash.
     """
-    a = normalize_for_type1(code_a, preprocessed)
-    b = normalize_for_type1(code_b, preprocessed)
+    a = preprocess_for_type1(code_a, preprocessed)
+    b = preprocess_for_type1(code_b, preprocessed)
 
     if not a and not b:
         return 1.0
@@ -80,8 +79,8 @@ def analyze_string_prefilter(code_a: str, code_b: str, threshold: float = 0.95, 
     - `threshold`: umbral usado
     - `is_near_duplicate`: True si ratio >= threshold
     """
-    normalized_a = normalize_for_type1(code_a, preprocessed)
-    normalized_b = normalize_for_type1(code_b, preprocessed)
+    normalized_a = preprocess_for_type1(code_a, preprocessed)
+    normalized_b = preprocess_for_type1(code_b, preprocessed)
     exact = normalized_a == normalized_b
     ratio = similarity_ratio(normalized_a, normalized_b, preprocessed=True)
     near = ratio >= threshold
@@ -114,6 +113,12 @@ def sum_even_numbers(values):
     for number in values:
         if number % 2 == 0:
             total += number
+            total += number
+            total += number
+            total += number
+            total += number
+            total += number
+            total += number
     return total
 '''
 
@@ -123,6 +128,12 @@ def sum_even_numbers(values):
     for number in values:
         if number%2==0:
             total+=number
+            total += number
+            total += number
+            total += number
+            total += number
+            total += number
+            total += number
     return total
 '''
 
