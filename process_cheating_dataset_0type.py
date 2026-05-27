@@ -4,6 +4,11 @@ Lee `cheating_dataset_clean.csv`, carga los archivos en `../cases/` y calcula la
 métricas de las capas existentes del proyecto.
 
 El resultado se exporta a `results/cheating_dataset_results.csv`.
+
+Reglas para clone_type en la salida:
+- Si Label es 0, clone_type se guarda como 0.
+- Si Label es 1 pero Clone_type es 4, clone_type se cambia a 0.
+- En los demás casos con Label 1, se conserva Clone_type.
 """
 
 from __future__ import annotations
@@ -23,7 +28,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR
 DEFAULT_CASES_DIR = PROJECT_ROOT / "cases"
 DEFAULT_INPUT_CSV = PROJECT_ROOT / "cheating_dataset_clean.csv"
-DEFAULT_OUTPUT_CSV = PROJECT_ROOT / "results" / "cheating_dataset_results.csv"
+DEFAULT_OUTPUT_CSV = PROJECT_ROOT / "results" / "cheating_dataset_results_with_label0.csv"
 
 
 def parse_dataset_csv(csv_path: Path) -> list[dict[str, str]]:
@@ -54,18 +59,34 @@ def load_source_file(cases_dir: Path, filename: str) -> str:
 
 
 def normalize_clone_type(label: str, clone_type: str) -> int:
+    """Normaliza la columna clone_type para el CSV de salida.
+
+    Reglas aplicadas:
+    - Si Label es 0, el par NO es plagio y clone_type debe ser 0.
+    - Si Label es 1 pero Clone_type viene vacío, se deja como 0 para evitar nulos.
+    - Si Label es 1 y Clone_type es 4, se cambia a 0 porque no se usará esa clase.
+    - En los demás casos con Label 1, se conserva Clone_type.
+    """
     try:
-        label_value = int(label)
+        label_value = int(str(label).strip())
     except ValueError:
         label_value = 0
 
-    if label_value != 1:
+    # Los pares con label 0 deben aparecer en el CSV de salida
+    # y su tipo de clon debe ser 0.
+    if label_value == 0:
         return 0
 
     try:
-        return int(clone_type) if clone_type else 0
+        clone_value = int(str(clone_type).strip()) if str(clone_type).strip() else 0
     except ValueError:
+        clone_value = 0
+
+    # Si un par con label 1 tiene clone_type 4, lo convertimos a 0.
+    if clone_value == 4:
         return 0
+
+    return clone_value
 
 
 def build_metric_row(
