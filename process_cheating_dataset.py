@@ -91,6 +91,7 @@ def build_metric_row(
         "jaccard_similarity": float(lexical_results.get("jaccard_similarity", 0.0)),
         "tfidf_cosine_similarity": float(lexical_results.get("tfidf_cosine_similarity", 0.0)),
         "markov_similarity": float(lexical_results.get("markov_similarity", 0.0)),
+        "entropy_difference": float(lexical_results.get("entropy_difference", 0.0)),
         "kl_divergence_a_to_b": float(lexical_results.get("kl_divergence_a_to_b", 0.0)),
         "kl_divergence_b_to_a": float(lexical_results.get("kl_divergence_b_to_a", 0.0)),
         "lexical_statistical_score": float(lexical_results.get("lexical_statistical_score", 0.0)),

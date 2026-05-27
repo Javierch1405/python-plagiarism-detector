@@ -28,6 +28,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR
 DEFAULT_CASES_DIR = PROJECT_ROOT / "cases"
 DEFAULT_INPUT_CSV = PROJECT_ROOT / "cheating_dataset_clean.csv"
+TEST_INPUT_CSV = PROJECT_ROOT / "test_input.csv"
 DEFAULT_OUTPUT_CSV = PROJECT_ROOT / "results" / "cheating_dataset_results_with_label0.csv"
 
 
@@ -111,7 +112,9 @@ def build_metric_row(
         "string_similarity_ratio": float(string_results.get("similarity_ratio", 0.0)),
         "jaccard_similarity": float(lexical_results.get("jaccard_similarity", 0.0)),
         "tfidf_cosine_similarity": float(lexical_results.get("tfidf_cosine_similarity", 0.0)),
+        "entropy_difference": float(lexical_results.get("entropy_difference", 0.0)),
         "markov_similarity": float(lexical_results.get("markov_similarity", 0.0)),
+        "kl_similarity": float(lexical_results.get("kl_similarity", 0.0)),
         "kl_divergence_a_to_b": float(lexical_results.get("kl_divergence_a_to_b", 0.0)),
         "kl_divergence_b_to_a": float(lexical_results.get("kl_divergence_b_to_a", 0.0)),
         "lexical_statistical_score": float(lexical_results.get("lexical_statistical_score", 0.0)),

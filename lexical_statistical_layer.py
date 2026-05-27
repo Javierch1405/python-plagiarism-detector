@@ -368,6 +368,8 @@ def analyze_lexical_statistical_similarity(
     symmetric_kl = (kl_a_to_b + kl_b_to_a) / 2
     kl_similarity = 1 / (1 + symmetric_kl)
 
+    entropy_difference = abs(entropy_a - entropy_b)
+
     categories_a = categorize_tokens(normalized_tokens_a)
     categories_b = categorize_tokens(normalized_tokens_b)
     matrix_a = markov_transition_matrix(categories_a)
@@ -390,9 +392,11 @@ def analyze_lexical_statistical_similarity(
         "tfidf_cosine_similarity": cosine,
         "entropy_a": entropy_a,
         "entropy_b": entropy_b,
+        "kl_similarity": kl_similarity,
         "kl_divergence_a_to_b": kl_a_to_b,
         "kl_divergence_b_to_a": kl_b_to_a,
         "markov_similarity": markov_similarity,
+        "entropy_difference": entropy_difference,
         "lexical_statistical_score": lexical_statistical_score,
     }
 

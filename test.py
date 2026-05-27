@@ -306,6 +306,7 @@ def build_result_row(
         "coincide_semantica": "si" if semantic_observed == expected_semantic else "no",
         "jaccard_similarity": float(lexical_results["jaccard_similarity"]),
         "tfidf_cosine_similarity": float(lexical_results["tfidf_cosine_similarity"]),
+        "entropy_difference": float(lexical_results.get("entropy_difference", 0.0)),
         "markov_similarity": float(lexical_results["markov_similarity"]),
         "kl_divergence_a_to_b": float(lexical_results["kl_divergence_a_to_b"]),
         "kl_divergence_b_to_a": float(lexical_results["kl_divergence_b_to_a"]),
@@ -362,6 +363,7 @@ def export_all_results(rows: list[dict[str, str | float]]) -> None:
         "string_similarity_ratio",
         "jaccard_similarity",
         "tfidf_cosine_similarity",
+        "entropy_difference",
         "markov_similarity",
         "kl_divergence_a_to_b",
         "kl_divergence_b_to_a",
@@ -495,6 +497,7 @@ def print_compact_report(
     print("-" * 72)
     print(f"Jaccard:        {lexical_results['jaccard_similarity']:.4f}")
     print(f"TF-IDF coseno:  {lexical_results['tfidf_cosine_similarity']:.4f}")
+    print(f"Entropy diff:   {lexical_results.get('entropy_difference', 0.0):.4f}")
     print(f"Markov:         {lexical_results['markov_similarity']:.4f}")
     print(f"KL A->B:        {lexical_results['kl_divergence_a_to_b']:.4f}")
     print(f"KL B->A:        {lexical_results['kl_divergence_b_to_a']:.4f}")

@@ -35,8 +35,8 @@ DEFAULT_EMBEDDING_CACHE_PATH = PROJECT_ROOT / "results" / "openai_embeddings_cac
 def _normalized_token_text(code: str, preprocessed: bool = False) -> str:
     """Convert code into a normalized token string for vectorization."""
     clean_code = code if preprocessed else preprocess_code(code)
-    tokens = tokenize_code(clean_code)
-    normalized = normalize_tokens(tokens)
+    # tokens = tokenize_code(clean_code)
+    normalized = normalize_tokens(clean_code)
     return " ".join(normalized)
 
 
@@ -169,8 +169,6 @@ def analyze_embedding_similarity(
         "embedding_feature_count": int(a.shape[0]),
         "embedding_score": score,
     }
-
-    raise ValueError("Unknown method: choose 'tfidf' or 'openai'")
 
 
 def print_embedding_report(results: dict[str, Any]) -> None:
