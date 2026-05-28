@@ -59,7 +59,6 @@ def load_source_file(cases_dir: Path, filename: str) -> str:
     return path.read_text(encoding="utf-8")
 
 
-
 def build_metric_row(
     file_a: str,
     file_b: str,
@@ -68,6 +67,7 @@ def build_metric_row(
     lexical_results: dict[str, Any],
     structural_results: dict[str, Any],
     semantic_results: dict[str, Any],
+    embedding_results: dict[str, Any],
     string_results: dict[str, Any],
     error: str = "",
 ) -> dict[str, Any]:
@@ -96,7 +96,7 @@ def build_metric_row(
     }
 
 
-def compute_metrics_for_pair(cases_dir: Path, file_a: str, file_b: str) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any]]:
+def compute_metrics_for_pair(cases_dir: Path, file_a: str, file_b: str) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any]]:
     code_a = load_source_file(cases_dir, file_a)
     code_b = load_source_file(cases_dir, file_b)
 
@@ -109,9 +109,7 @@ def compute_metrics_for_pair(cases_dir: Path, file_a: str, file_b: str) -> tuple
     embedding_results = analyze_embedding_similarity(clean_a, clean_b, preprocessed=True)
     string_results = analyze_string_prefilter(clean_a, clean_b, threshold=0.95, preprocessed=True)
 
-    semantic_results.update(embedding_results)
-
-    return lexical_results, structural_results, semantic_results, string_results
+    return lexical_results, structural_results, semantic_results, embedding_results, string_results
 
 
 def export_to_csv(rows: list[dict[str, Any]], output_path: Path) -> None:
@@ -146,7 +144,7 @@ def run(
             continue
 
         try:
-            lexical_results, structural_results, semantic_results, string_results = compute_metrics_for_pair(
+            lexical_results, structural_results, semantic_results, embedding_results, string_results = compute_metrics_for_pair(
                 cases_dir,
                 file_a,
                 file_b,
@@ -159,6 +157,7 @@ def run(
                 lexical_results,
                 structural_results,
                 semantic_results,
+                embedding_results,
                 string_results,
             )
         except Exception as exc:
@@ -167,6 +166,7 @@ def run(
                 file_b,
                 label,
                 clone_type,
+                {},
                 {},
                 {},
                 {},
