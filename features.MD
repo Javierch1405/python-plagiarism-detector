@@ -1,13 +1,13 @@
 
 # Capa 0
-- similarity_ratio
+- string_similarity_ratio
 
 # Capa 1 - Lexical
 - jaccard_similarity
 - kl_similarity
 - tfidf_cosine_similarity
 - markov_similarity
-- entropy_difference = abs(entropy_a - entropy_b)
+- entropy_difference
 
 # Capa 2 - Structural
 - ast_node_type_jaccard
