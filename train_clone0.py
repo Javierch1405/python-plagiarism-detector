@@ -43,6 +43,8 @@ from sklearn.metrics import (
     confusion_matrix,
 )
 from sklearn.model_selection import (
+    GroupKFold,
+    GroupShuffleSplit,
     StratifiedKFold,
     cross_validate,
     cross_val_predict,
@@ -81,6 +83,88 @@ PAIR_INFO_CANDIDATES = [
     "path_b",
     "label",
 ]
+
+GROUP_A_COLUMNS = ["file_a", "filename_a", "File_1", "file1"]
+GROUP_B_COLUMNS = ["file_b", "filename_b", "File_2", "file2"]
+
+
+class UnionFind:
+    def __init__(self) -> None:
+        self.parent: dict[str, str] = {}
+
+    def find(self, x: str) -> str:
+        if x not in self.parent:
+            self.parent[x] = x
+            return x
+        if self.parent[x] != x:
+            self.parent[x] = self.find(self.parent[x])
+        return self.parent[x]
+
+    def union(self, a: str, b: str) -> None:
+        root_a = self.find(a)
+        root_b = self.find(b)
+        if root_a != root_b:
+            self.parent[root_b] = root_a
+
+
+def find_pair_columns(df: pd.DataFrame) -> tuple[str, str]:
+    file_a_col = next((c for c in GROUP_A_COLUMNS if c in df.columns), None)
+    file_b_col = next((c for c in GROUP_B_COLUMNS if c in df.columns), None)
+
+    if file_a_col is None or file_b_col is None:
+        raise ValueError(
+            "No se encontraron las columnas de archivos de par en el dataset. "
+            "Se espera alguna de: file_a, filename_a, File_1, file1 y file_b, filename_b, File_2, file2."
+        )
+
+    return file_a_col, file_b_col
+
+
+def get_pair_group_ids(df: pd.DataFrame) -> np.ndarray:
+    file_a_col, file_b_col = find_pair_columns(df)
+    uf = UnionFind()
+    names: set[str] = set()
+
+    file_a_values = df[file_a_col].astype(str).str.strip().tolist()
+    file_b_values = df[file_b_col].astype(str).str.strip().tolist()
+
+    for file_a, file_b in zip(file_a_values, file_b_values):
+        names.add(file_a)
+        names.add(file_b)
+        if file_a and file_b:
+            uf.union(file_a, file_b)
+
+    root_names = sorted({uf.find(name) for name in names})
+    root_to_id = {root: idx for idx, root in enumerate(root_names)}
+
+    groups = np.array([root_to_id[uf.find(file_a)] for file_a in file_a_values], dtype=int)
+    return groups
+
+
+def make_group_cv(groups: np.ndarray, n_splits: int = 5) -> GroupKFold | StratifiedKFold:
+    unique_groups = np.unique(groups)
+    if len(unique_groups) >= 2:
+        n_splits = min(n_splits, len(unique_groups))
+        if n_splits >= 2:
+            return GroupKFold(n_splits=n_splits)
+
+    return StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+
+
+def group_train_test_split(
+    X: pd.DataFrame,
+    y: pd.Series,
+    groups: np.ndarray,
+    test_size: float,
+    random_state: int,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series]:
+    splitter = GroupShuffleSplit(
+        n_splits=1,
+        test_size=test_size,
+        random_state=random_state,
+    )
+    train_idx, test_idx = next(splitter.split(X, y, groups))
+    return X.iloc[train_idx], X.iloc[test_idx], y.iloc[train_idx], y.iloc[test_idx]
 
 
 def to_json_safe(obj: Any) -> Any:
@@ -265,19 +349,29 @@ def evaluate_model(
     X: pd.DataFrame,
     y: pd.Series,
     output_dir: Path,
+    groups: np.ndarray | None = None,
     random_state: int = 42,
 ) -> dict:
     """Entrena/evalua un modelo con holdout y cross-validation."""
 
     labels = sorted(y.unique().tolist())
 
-    X_train, X_test, y_train, y_test = train_test_split(
-        X,
-        y,
-        test_size=0.25,
-        stratify=y,
-        random_state=random_state,
-    )
+    if groups is not None:
+        X_train, X_test, y_train, y_test = group_train_test_split(
+            X,
+            y,
+            groups=groups,
+            test_size=0.25,
+            random_state=random_state,
+        )
+    else:
+        X_train, X_test, y_train, y_test = train_test_split(
+            X,
+            y,
+            test_size=0.25,
+            stratify=y,
+            random_state=random_state,
+        )
 
     model.fit(X_train, y_train)
     y_pred = model.predict(X_test)
@@ -299,17 +393,15 @@ def evaluate_model(
     )
     cm = confusion_matrix(y_test, y_pred, labels=labels)
 
-    cv = StratifiedKFold(
-        n_splits=5,
-        shuffle=True,
-        random_state=random_state,
-    )
+    cv = make_group_cv(groups, n_splits=5)
+    cv_folds = cv.n_splits
 
     cv_results = cross_validate(
         model,
         X,
         y,
         cv=cv,
+        groups=groups if isinstance(cv, GroupKFold) else None,
         scoring={
             "accuracy": "accuracy",
             "balanced_accuracy": "balanced_accuracy",
@@ -363,7 +455,7 @@ def evaluate_model(
     print(f"Orden de etiquetas: {labels}")
     print(cm)
 
-    print("\nCross-validation 5 folds")
+    print(f"\nCross-validation {cv_folds} folds")
     print(
         f"Accuracy: {results['cv']['accuracy_mean']:.3f} "
         f"+- {results['cv']['accuracy_std']:.3f}"
@@ -392,17 +484,20 @@ def save_cv_errors(
     y: pd.Series,
     original_df: pd.DataFrame,
     output_dir: Path,
+    groups: np.ndarray | None = None,
     random_state: int = 42,
 ) -> Path:
     """Guarda errores de cross-validation para un modelo especifico."""
 
-    cv = StratifiedKFold(
-        n_splits=5,
-        shuffle=True,
-        random_state=random_state,
-    )
+    cv = make_group_cv(groups, n_splits=5)
 
-    y_pred_cv = cross_val_predict(model, X, y, cv=cv)
+    y_pred_cv = cross_val_predict(
+        model,
+        X,
+        y,
+        cv=cv,
+        groups=groups if isinstance(cv, GroupKFold) else None,
+    )
     error_mask = y_pred_cv != y.values
 
     error_df = pd.DataFrame()
@@ -439,6 +534,7 @@ def save_cv_predictions_by_pair(
     y: pd.Series,
     original_df: pd.DataFrame,
     output_dir: Path,
+    groups: np.ndarray | None = None,
     random_state: int = 42,
 ) -> Path:
     """
@@ -449,11 +545,7 @@ def save_cv_predictions_by_pair(
         No se guarda clone_type_real_mapeado porque el usuario pidio quitarlo.
     """
 
-    cv = StratifiedKFold(
-        n_splits=5,
-        shuffle=True,
-        random_state=random_state,
-    )
+    cv = make_group_cv(groups, n_splits=5)
 
     results_df = pd.DataFrame()
     results_df["row_index"] = original_df.index
@@ -466,7 +558,13 @@ def save_cv_predictions_by_pair(
         results_df["clone_type_original"] = original_df[TARGET_COL].values
 
     for model_name, model in models.items():
-        y_pred = cross_val_predict(model, X, y, cv=cv)
+        y_pred = cross_val_predict(
+            model,
+            X,
+            y,
+            cv=cv,
+            groups=groups if isinstance(cv, GroupKFold) else None,
+        )
         results_df[f"{model_name}_pred"] = y_pred
         results_df[f"{model_name}_acerto"] = y_pred == y.values
 
@@ -682,6 +780,7 @@ def main() -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     X, y, original_df = load_dataset(args.csv)
+    groups = get_pair_group_ids(original_df)
     models = build_models(feature_names=list(X.columns), random_state=args.random_state)
 
     if args.compare:
@@ -698,6 +797,7 @@ def main() -> None:
             X=X,
             y=y,
             output_dir=output_dir,
+            groups=groups,
             random_state=args.random_state,
         )
         comparison[model_name] = result
@@ -739,6 +839,7 @@ def main() -> None:
         y=y,
         original_df=original_df,
         output_dir=output_dir,
+        groups=groups,
         random_state=args.random_state,
     )
 
@@ -750,6 +851,7 @@ def main() -> None:
         y=y,
         original_df=original_df,
         output_dir=output_dir,
+        groups=groups,
         random_state=args.random_state,
     )
 
