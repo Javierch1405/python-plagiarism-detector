@@ -59,36 +59,6 @@ def load_source_file(cases_dir: Path, filename: str) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def normalize_clone_type(label: str, clone_type: str) -> int:
-    """Normaliza la columna clone_type para el CSV de salida.
-
-    Reglas aplicadas:
-    - Si Label es 0, el par NO es plagio y clone_type debe ser 0.
-    - Si Label es 1 pero Clone_type viene vacío, se deja como 0 para evitar nulos.
-    - Si Label es 1 y Clone_type es 4, se cambia a 0 porque no se usará esa clase.
-    - En los demás casos con Label 1, se conserva Clone_type.
-    """
-    try:
-        label_value = int(str(label).strip())
-    except ValueError:
-        label_value = 0
-
-    # Los pares con label 0 deben aparecer en el CSV de salida
-    # y su tipo de clon debe ser 0.
-    if label_value == 0:
-        return 0
-
-    try:
-        clone_value = int(str(clone_type).strip()) if str(clone_type).strip() else 0
-    except ValueError:
-        clone_value = 0
-
-    # Si un par con label 1 tiene clone_type 4, lo convertimos a 0.
-    if clone_value == 4:
-        return 0
-
-    return clone_value
-
 
 def build_metric_row(
     file_a: str,
@@ -98,7 +68,6 @@ def build_metric_row(
     lexical_results: dict[str, Any],
     structural_results: dict[str, Any],
     semantic_results: dict[str, Any],
-    embedding_results: dict[str, Any],
     string_results: dict[str, Any],
     error: str = "",
 ) -> dict[str, Any]:
@@ -127,7 +96,7 @@ def build_metric_row(
     }
 
 
-def compute_metrics_for_pair(cases_dir: Path, file_a: str, file_b: str) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any]]:
+def compute_metrics_for_pair(cases_dir: Path, file_a: str, file_b: str) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any]]:
     code_a = load_source_file(cases_dir, file_a)
     code_b = load_source_file(cases_dir, file_b)
 
@@ -140,7 +109,9 @@ def compute_metrics_for_pair(cases_dir: Path, file_a: str, file_b: str) -> tuple
     embedding_results = analyze_embedding_similarity(clean_a, clean_b, preprocessed=True)
     string_results = analyze_string_prefilter(clean_a, clean_b, threshold=0.95, preprocessed=True)
 
-    return lexical_results, structural_results, semantic_results, embedding_results, string_results
+    semantic_results.update(embedding_results)
+
+    return lexical_results, structural_results, semantic_results, string_results
 
 
 def export_to_csv(rows: list[dict[str, Any]], output_path: Path) -> None:
@@ -169,13 +140,13 @@ def run(
         file_a = row["file_a"]
         file_b = row["file_b"]
         label = int(row["label"]) if row["label"].isdigit() else 0
-        clone_type = normalize_clone_type(row["label"], row["clone_type"])
+        clone_type = int(row["clone_type"]) if row["clone_type"].isdigit() else 0
 
         if only_plagiarized and label != 1:
             continue
 
         try:
-            lexical_results, structural_results, semantic_results, embedding_results, string_results = compute_metrics_for_pair(
+            lexical_results, structural_results, semantic_results, string_results = compute_metrics_for_pair(
                 cases_dir,
                 file_a,
                 file_b,
@@ -188,7 +159,6 @@ def run(
                 lexical_results,
                 structural_results,
                 semantic_results,
-                embedding_results,
                 string_results,
             )
         except Exception as exc:
@@ -197,7 +167,6 @@ def run(
                 file_b,
                 label,
                 clone_type,
-                {},
                 {},
                 {},
                 {},

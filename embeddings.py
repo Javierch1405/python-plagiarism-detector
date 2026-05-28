@@ -33,11 +33,8 @@ DEFAULT_EMBEDDING_CACHE_PATH = PROJECT_ROOT / "results" / "openai_embeddings_cac
 
 
 def _normalized_token_text(code: str, preprocessed: bool = False) -> str:
-    """Convert code into a normalized token string for vectorization."""
-    clean_code = code if preprocessed else preprocess_code(code)
-    # tokens = tokenize_code(clean_code)
-    normalized = normalize_tokens(clean_code)
-    return " ".join(normalized)
+    """Return clean code for embedding. OpenAI embeddings handle tokenization internally."""
+    return code if preprocessed else preprocess_code(code)
 
 
 def _cache_key(model: str, text: str) -> str:

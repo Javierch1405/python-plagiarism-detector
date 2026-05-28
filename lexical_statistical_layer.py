@@ -131,31 +131,40 @@ def _clean_whitespace(code: str) -> str:
 
 
 def preprocess_code(code: str) -> str:
-    """Remove comments/docstrings and normalize unnecessary whitespace."""
+    """Remove comments/docstrings and normalize whitespace while preserving indentation."""
     if not isinstance(code, str):
         raise TypeError("code must be a string")
 
     docstring_ranges = _docstring_ranges(code)
-    output_tokens: list[tokenize.TokenInfo] = []
+    lines = code.splitlines()
 
+    # Find the column where the comment starts on each line via the tokenizer,
+    # so a '#' inside a string literal is never mistaken for a comment.
+    comment_cols: dict[int, int] = {}
+    tokenized = True
     try:
         stream = io.StringIO(code).readline
         for token_info in tokenize.generate_tokens(stream):
-            token_type = token_info.type
-            start_line = token_info.start[0]
+            if token_info.type == tokenize.COMMENT:
+                comment_cols[token_info.start[0]] = token_info.start[1]
+    except (tokenize.TokenError, SyntaxError):
+        tokenized = False
 
-            if token_type == tokenize.COMMENT:
-                continue
-            if token_type == tokenize.STRING and any(start <= start_line <= end for start, end in docstring_ranges):
-                continue
+    cleaned_lines = []
+    for i, line in enumerate(lines, start=1):
+        # Skip docstring lines
+        if any(start <= i <= end for start, end in docstring_ranges):
+            continue
 
-            output_tokens.append(token_info)
+        # Remove comments
+        if i in comment_cols:
+            line = line[: comment_cols[i]]
+        elif not tokenized and "#" in line:
+            line = line.split("#", 1)[0]
 
-        cleaned = tokenize.untokenize(output_tokens)
-    except tokenize.TokenError:
-        cleaned = "\n".join(line.split("#", 1)[0] for line in code.splitlines())
+        cleaned_lines.append(line.rstrip())
 
-    return _clean_whitespace(cleaned)
+    return "\n".join(cleaned_lines).strip()
 
 
 def tokenize_code(code: str) -> list[str]:
