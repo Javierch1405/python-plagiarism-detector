@@ -57,23 +57,6 @@ from sklearn.svm import LinearSVC
 
 TARGET_COL = "clone_type"
 
-# Columnas que normalmente NO conviene usar como features porque identifican archivos,
-# etiquetas o informacion que podria causar fuga de informacion.
-DEFAULT_EXCLUDE_COLS = {
-    "clone_type",
-    "label",
-    "file_a",
-    "file_b",
-    "filename_a",
-    "filename_b",
-    "path_a",
-    "path_b",
-    "student_a",
-    "student_b",
-    "pair_id",
-    "id",
-}
-
 PAIR_INFO_CANDIDATES = [
     "file_a",
     "file_b",
@@ -229,8 +212,6 @@ def load_dataset(csv_path: str | Path) -> Tuple[pd.DataFrame, pd.Series, pd.Data
     # Seleccion de features: numericas y booleanas, excluyendo identificadores/target.
     candidate_cols = []
     for col in df.columns:
-        if col in DEFAULT_EXCLUDE_COLS:
-            continue
 
         # Intentar convertir a numerico. Si tiene suficientes valores numericos, se usa.
         numeric_col = pd.to_numeric(df[col], errors="coerce")
