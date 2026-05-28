@@ -206,8 +206,8 @@ def load_dataset(csv_path: str | Path) -> Tuple[pd.DataFrame, pd.Series, pd.Data
         )
 
     # IMPORTANTE: en esta version el clone_type 0 se queda como 0.
-    # Solo convertimos 4 -> 0 por la regla nueva del dataset.
-    y = y_original.astype(int).replace({4: 0})
+    # No hacemos conversiones especiales de 4 -> 0; conservamos los valores tal cual.
+    y = y_original.astype(int)
 
     # Seleccion de features: numericas y booleanas, excluyendo identificadores/target.
     candidate_cols = []

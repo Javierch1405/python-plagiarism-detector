@@ -7,8 +7,7 @@ El resultado se exporta a `results/cheating_dataset_results.csv`.
 
 Reglas para clone_type en la salida:
 - Si Label es 0, clone_type se guarda como 0.
-- Si Label es 1 pero Clone_type es 4, clone_type se cambia a 0.
-- En los demás casos con Label 1, se conserva Clone_type.
+- En los demás casos con Label 1, se conserva Clone_type (si está presente).
 """
 
 from __future__ import annotations
