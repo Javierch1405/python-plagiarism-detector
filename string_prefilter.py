@@ -15,7 +15,7 @@ import re
 import difflib
 from typing import Tuple, Any
 
-from lexical_statistical_layer import preprocess_code
+from lexical_statistical_layer import preprocess_code, tokenize_code
 
 
 def normalize_for_type1(code: str, preprocessed: bool = False) -> str:
@@ -23,20 +23,22 @@ def normalize_for_type1(code: str, preprocessed: bool = False) -> str:
 
     - Si `preprocessed` es False, llama a `preprocess_code` para quitar
       comentarios y docstrings.
-    - Elimina líneas en blanco, recorta espacios por línea y colapsa
-      secuencias de whitespace en un solo espacio.
-    - Devuelve una cadena compacta y estable para comparar.
+    - Tokeniza y reúne los tokens con un espacio simple, de modo que cualquier
+      diferencia de espaciado (incluida la que rodea a operadores, p.ej. `s=0`
+      vs `s = 0`) deje de afectar la comparación. Sigue siendo sensible al
+      renombrado de identificadores/literales, que es lo propio del Tipo 2.
+    - Si el código no se puede tokenizar, cae a un simple colapso de whitespace.
     """
     if not isinstance(code, str):
         raise TypeError("code must be a string")
 
     clean = code if preprocessed else preprocess_code(code)
-    # Quitar líneas vacías y recortar espacios por línea
-    lines = [line.strip() for line in clean.splitlines() if line.strip()]
-    joined = "\n".join(lines)
-    # Colapsar cualquier whitespace (incluye nuevas líneas) a espacios simples
-    collapsed = re.sub(r"\s+", " ", joined)
-    return collapsed.strip()
+    try:
+        return " ".join(tokenize_code(clean))
+    except ValueError:
+        lines = [line.strip() for line in clean.splitlines() if line.strip()]
+        joined = "\n".join(lines)
+        return re.sub(r"\s+", " ", joined).strip()
 
 
 def exact_match(code_a: str, code_b: str, preprocessed: bool = False) -> bool:
@@ -83,7 +85,13 @@ def analyze_string_prefilter(code_a: str, code_b: str, threshold: float = 0.95, 
     normalized_a = normalize_for_type1(code_a, preprocessed)
     normalized_b = normalize_for_type1(code_b, preprocessed)
     exact = normalized_a == normalized_b
-    ratio = similarity_ratio(normalized_a, normalized_b, preprocessed=True)
+
+    if not normalized_a and not normalized_b:
+        ratio = 1.0
+    elif not normalized_a or not normalized_b:
+        ratio = 0.0
+    else:
+        ratio = difflib.SequenceMatcher(None, normalized_a, normalized_b).ratio()
     near = ratio >= threshold
 
     return {

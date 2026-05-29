@@ -314,14 +314,11 @@ def build_result_row(
         "string_exact_match": string_results.get("exact_match", False),
         "string_similarity_ratio": float(string_results.get("similarity_ratio", 0.0)),
         "ast_node_type_jaccard": float(structural_results["ast_node_type_jaccard"]),
-        "ast_sequence_similarity": float(structural_results["ast_sequence_similarity"]),
         "ast_node_count_similarity": float(structural_results["ast_node_count_similarity"]),
         "ast_depth_similarity": float(structural_results["ast_depth_similarity"]),
         "tree_edit_distance": structural_results["tree_edit_distance"],
         "tree_edit_similarity": float(structural_results["tree_edit_similarity"]),
-        "apted_available": structural_results["apted_available"],
-        "apted_tree_edit_distance": structural_results["apted_tree_edit_distance"],
-        "apted_tree_edit_similarity": structural_results["apted_tree_edit_similarity"],
+        "shared_subtree_coverage": float(structural_results["shared_subtree_coverage"]),
         "structural_score": structural_score,
         "semantic_runnable": semantic_results["semantic_runnable"],
         "semantic_reason": semantic_results["semantic_reason"],
@@ -377,14 +374,11 @@ def export_all_results(rows: list[dict[str, str | float]]) -> None:
         "similitud_observada_estructural",
         "coincide_estructural",
         "ast_node_type_jaccard",
-        "ast_sequence_similarity",
         "ast_node_count_similarity",
         "ast_depth_similarity",
         "tree_edit_distance",
         "tree_edit_similarity",
-        "apted_available",
-        "apted_tree_edit_distance",
-        "apted_tree_edit_similarity",
+        "shared_subtree_coverage",
         "structural_score",
         "nota",
     ]
@@ -437,14 +431,11 @@ def export_all_results(rows: list[dict[str, str | float]]) -> None:
         "kl_divergence_b_to_a",
         "lexical_statistical_score",
         "ast_node_type_jaccard",
-        "ast_sequence_similarity",
         "ast_node_count_similarity",
         "ast_depth_similarity",
         "tree_edit_distance",
         "tree_edit_similarity",
-        "apted_available",
-        "apted_tree_edit_distance",
-        "apted_tree_edit_similarity",
+        "shared_subtree_coverage",
         "structural_score",
         "semantic_runnable",
         "semantic_reason",
@@ -503,15 +494,11 @@ def print_compact_report(
     print(f"KL B->A:        {lexical_results['kl_divergence_b_to_a']:.4f}")
     print(f"Score Capa 1:   {lexical_results['lexical_statistical_score']:.4f}")
     print(f"AST Jaccard:    {structural_results['ast_node_type_jaccard']:.4f}")
-    print(f"AST secuencia:  {structural_results['ast_sequence_similarity']:.4f}")
     print(f"AST tamano:     {structural_results['ast_node_count_similarity']:.4f}")
     print(f"AST profundidad:{structural_results['ast_depth_similarity']:.4f}")
     print(f"Tree Edit Dist: {structural_results['tree_edit_distance']}")
     print(f"Tree Edit Sim:  {structural_results['tree_edit_similarity']:.4f}")
-    print(f"APTED activo:   {structural_results['apted_available']}")
-    if structural_results["apted_available"] == "si":
-        print(f"APTED Dist:     {structural_results['apted_tree_edit_distance']}")
-        print(f"APTED Sim:      {structural_results['apted_tree_edit_similarity']:.4f}")
+    print(f"Subtree cover:  {structural_results['shared_subtree_coverage']:.4f}")
     print(f"Score Capa 2:   {structural_results['structural_score']:.4f}")
     print(f"Runnable Capa 3:{semantic_results['semantic_runnable']}")
     print(f"Output Sim:     {semantic_results.get('output_similarity', 0.0):.4f}")

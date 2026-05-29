@@ -130,8 +130,105 @@ def _clean_whitespace(code: str) -> str:
     return "\n".join(clean_lines).strip()
 
 
+def _canonical_string_token(token: str) -> str | None:
+    """Return a canonical repr for a plain string/bytes literal so that quote
+    style and escaping no longer affect equality. Returns None for anything
+    that is not a plain literal (e.g. f-strings), leaving it untouched."""
+    try:
+        value = ast.literal_eval(token)
+    except Exception:
+        return None
+    if isinstance(value, (str, bytes)):
+        return repr(value)
+    return None
+
+
+def _normalize_string_quotes(code: str) -> str:
+    """Rewrite single-line string literals to a canonical quote style in place."""
+    try:
+        tokens = list(tokenize.generate_tokens(io.StringIO(code).readline))
+    except (tokenize.TokenError, SyntaxError, IndentationError):
+        return code
+
+    edits_by_line: dict[int, list[tuple[int, int, str]]] = defaultdict(list)
+    for token_info in tokens:
+        if token_info.type != tokenize.STRING:
+            continue
+        (start_row, start_col), (end_row, end_col) = token_info.start, token_info.end
+        if start_row != end_row:
+            continue  # leave multi-line (triple-quoted) strings untouched
+        canonical = _canonical_string_token(token_info.string)
+        if canonical is None or canonical == token_info.string:
+            continue
+        edits_by_line[start_row].append((start_col, end_col, canonical))
+
+    if not edits_by_line:
+        return code
+
+    lines = code.splitlines()
+    for lineno, edits in edits_by_line.items():
+        line = lines[lineno - 1]
+        for start_col, end_col, canonical in sorted(edits, reverse=True):
+            line = line[:start_col] + canonical + line[end_col:]
+        lines[lineno - 1] = line
+
+    return "\n".join(lines)
+
+
+def _strip_redundant_parens(code: str) -> str:
+    """Remove only redundant grouping parentheses, leaving all other formatting.
+
+    A pair of parentheses is redundant iff removing it leaves the parsed AST
+    unchanged. Each candidate removal is checked against the parser, so necessary
+    parentheses (calls, tuples, precedence grouping) are never touched. Runs
+    iteratively because nested groups like ``((a+b))*c`` only have one spare pair."""
+    try:
+        baseline = ast.dump(ast.parse(code))
+    except SyntaxError:
+        return code
+
+    while True:
+        try:
+            tokens = list(tokenize.generate_tokens(io.StringIO(code).readline))
+        except (tokenize.TokenError, SyntaxError, IndentationError):
+            return code
+
+        line_starts = [0]
+        for line in code.splitlines(keepends=True):
+            line_starts.append(line_starts[-1] + len(line))
+
+        def offset(pos: tuple[int, int]) -> int:
+            row, col = pos
+            return line_starts[row - 1] + col
+
+        open_stack: list[int] = []
+        pairs: list[tuple[int, int]] = []
+        for token_info in tokens:
+            if token_info.type != tokenize.OP:
+                continue
+            if token_info.string == "(":
+                open_stack.append(offset(token_info.start))
+            elif token_info.string == ")" and open_stack:
+                pairs.append((open_stack.pop(), offset(token_info.start)))
+
+        removed = False
+        for open_off, close_off in pairs:
+            candidate = code[:open_off] + " " + code[open_off + 1:close_off] + " " + code[close_off + 1:]
+            try:
+                if ast.dump(ast.parse(candidate)) == baseline:
+                    code = candidate
+                    removed = True
+                    break
+            except SyntaxError:
+                continue
+
+        if not removed:
+            return code
+
+
 def preprocess_code(code: str) -> str:
-    """Remove comments/docstrings and normalize whitespace while preserving indentation."""
+    """Remove comments/docstrings, drop redundant parentheses, canonicalize
+    string-quote style, and normalize whitespace while preserving indentation."""
     if not isinstance(code, str):
         raise TypeError("code must be a string")
 
@@ -164,7 +261,9 @@ def preprocess_code(code: str) -> str:
 
         cleaned_lines.append(line.rstrip())
 
-    return "\n".join(cleaned_lines).strip()
+    cleaned = "\n".join(cleaned_lines).strip()
+    cleaned = _strip_redundant_parens(cleaned)
+    return _normalize_string_quotes(cleaned)
 
 
 def tokenize_code(code: str) -> list[str]:

@@ -7,19 +7,13 @@ compare structural patterns, including a simple ordered Tree Edit Distance.
 from __future__ import annotations
 
 import ast
+import hashlib
 from collections import Counter
 from dataclasses import dataclass
-from difflib import SequenceMatcher
 from functools import lru_cache
 from typing import Any
 
 from lexical_statistical_layer import preprocess_code
-
-try:
-    from apted import APTED, Config
-except ImportError:
-    APTED = None
-    Config = object
 
 
 IGNORED_AST_NODE_TYPES = {"Load", "Store", "Del"}
@@ -31,31 +25,6 @@ class ComparableASTNode:
 
     label: str
     children: tuple[ComparableASTNode, ...] = ()
-
-
-if APTED is not None:
-
-    class ASTAptedConfig(Config):
-        """APTED edit costs for compact AST nodes."""
-
-        def children(self, node: ComparableASTNode) -> tuple[ComparableASTNode, ...]:
-            """Return ordered children for APTED."""
-            return node.children
-
-        def rename(self, node_a: ComparableASTNode, node_b: ComparableASTNode) -> int:
-            """Charge one edit when AST node labels differ."""
-            return 0 if node_a.label == node_b.label else 1
-
-        def insert(self, node: ComparableASTNode) -> int:
-            """Charge one edit for inserting a node."""
-            return 1
-
-        def delete(self, node: ComparableASTNode) -> int:
-            """Charge one edit for deleting a node."""
-            return 1
-
-else:
-    ASTAptedConfig = None
 
 
 def parse_python_ast(code: str, preprocessed: bool = False) -> ast.AST:
@@ -109,16 +78,6 @@ def ast_jaccard_similarity(nodes_a: list[str], nodes_b: list[str]) -> float:
         return 0.0
 
     return len(set_a & set_b) / len(set_a | set_b)
-
-
-def ast_sequence_similarity(nodes_a: list[str], nodes_b: list[str]) -> float:
-    """Compare AST preorder node sequences using SequenceMatcher."""
-    if not nodes_a and not nodes_b:
-        return 1.0
-    if not nodes_a or not nodes_b:
-        return 0.0
-
-    return SequenceMatcher(None, nodes_a, nodes_b).ratio()
 
 
 def ast_depth(tree: ast.AST) -> int:
@@ -228,26 +187,78 @@ def tree_edit_similarity(tree_a: ComparableASTNode, tree_b: ComparableASTNode) -
     return max(0.0, min(1.0, similarity))
 
 
-def apted_tree_edit_distance(tree_a: ComparableASTNode, tree_b: ComparableASTNode) -> int | None:
-    """Compute APTED distance when the optional apted package is installed."""
-    if APTED is None or ASTAptedConfig is None:
-        return None
+def _annotate_subtrees(tree: ComparableASTNode) -> tuple[dict[int, tuple[bytes, int]], int]:
+    """Merkle-hash every subtree once. Return (per-node {id: (digest, size)}, total nodes)."""
+    info: dict[int, tuple[bytes, int]] = {}
 
-    return int(APTED(tree_a, tree_b, ASTAptedConfig()).compute_edit_distance())
+    def walk(node: ComparableASTNode) -> tuple[bytes, int]:
+        child_digests: list[bytes] = []
+        size = 1
+        for child in node.children:
+            digest, child_size = walk(child)
+            child_digests.append(digest)
+            size += child_size
+
+        hasher = hashlib.blake2b(digest_size=16)
+        hasher.update(node.label.encode("utf-8"))
+        for digest in child_digests:
+            hasher.update(digest)
+
+        digest = hasher.digest()
+        info[id(node)] = (digest, size)
+        return digest, size
+
+    _, total = walk(tree)
+    return info, total
 
 
-def apted_tree_edit_similarity(tree_a: ComparableASTNode, tree_b: ComparableASTNode) -> float | None:
-    """Normalize APTED distance as a 0-1 similarity score."""
-    distance = apted_tree_edit_distance(tree_a, tree_b)
-    if distance is None:
-        return None
+def _greedy_covered_nodes(
+    tree: ComparableASTNode,
+    info: dict[int, tuple[bytes, int]],
+    available: Counter,
+    min_size: int,
+) -> int:
+    """Count nodes of `tree` covered by maximal subtrees still available in the
+    other tree. Top-down and greedy: when a subtree matches, the whole subtree is
+    consumed and its descendants are not revisited. `available` is mutated."""
+    covered = 0
+    stack = [tree]
+    while stack:
+        node = stack.pop()
+        digest, size = info[id(node)]
+        if size >= min_size and available.get(digest, 0) > 0:
+            available[digest] -= 1
+            covered += size
+        else:
+            stack.extend(node.children)
+    return covered
 
-    max_size = max(comparable_tree_size(tree_a), comparable_tree_size(tree_b))
-    if max_size == 0:
+
+def shared_subtree_coverage(
+    tree_a: ComparableASTNode, tree_b: ComparableASTNode, min_size: int = 3
+) -> float:
+    """Fraction of structure shared as maximal identical subtrees (0-1).
+
+    Measures how much of each tree is literally reused in the other: high for
+    Type-3 (copied skeleton with a few edits), low for independent rewrites that
+    merely share a goal. Subtrees smaller than `min_size` don't count, so generic
+    one- and two-node idioms (a bare Name, `return x`) can't inflate the score.
+    """
+    info_a, size_a = _annotate_subtrees(tree_a)
+    info_b, size_b = _annotate_subtrees(tree_b)
+
+    if size_a == 0 and size_b == 0:
         return 1.0
+    if size_a == 0 or size_b == 0:
+        return 0.0
 
-    similarity = 1.0 - (distance / max_size)
-    return max(0.0, min(1.0, similarity))
+    counts_a = Counter(digest for digest, _ in info_a.values())
+    counts_b = Counter(digest for digest, _ in info_b.values())
+
+    covered_a = _greedy_covered_nodes(tree_a, info_a, counts_b.copy(), min_size)
+    covered_b = _greedy_covered_nodes(tree_b, info_b, counts_a.copy(), min_size)
+
+    return (covered_a + covered_b) / (size_a + size_b)
 
 
 def analyze_structural_similarity(
@@ -270,20 +281,17 @@ def analyze_structural_similarity(
     depth_b = ast_depth(tree_b)
 
     node_type_jaccard = ast_jaccard_similarity(node_types_a, node_types_b)
-    sequence_similarity = ast_sequence_similarity(node_types_a, node_types_b)
     node_count_similarity = numeric_similarity(node_count_a, node_count_b)
     depth_similarity = numeric_similarity(depth_a, depth_b)
     edit_distance = tree_edit_distance(comparable_tree_a, comparable_tree_b)
     edit_similarity = tree_edit_similarity(comparable_tree_a, comparable_tree_b)
-    apted_distance = apted_tree_edit_distance(comparable_tree_a, comparable_tree_b)
-    apted_similarity = apted_tree_edit_similarity(comparable_tree_a, comparable_tree_b)
-    apted_similarity_for_score = apted_similarity if apted_similarity is not None else edit_similarity
+    subtree_coverage = shared_subtree_coverage(comparable_tree_a, comparable_tree_b)
 
     structural_score = (
-        0.30 * apted_similarity_for_score
-        + 0.25 * sequence_similarity
-        + 0.20 * node_type_jaccard
-        + 0.15 * node_count_similarity
+        0.35 * subtree_coverage
+        + 0.30 * edit_similarity
+        + 0.15 * node_type_jaccard
+        + 0.10 * node_count_similarity
         + 0.10 * depth_similarity
     )
 
@@ -297,14 +305,11 @@ def analyze_structural_similarity(
         "ast_depth_a": depth_a,
         "ast_depth_b": depth_b,
         "ast_node_type_jaccard": node_type_jaccard,
-        "ast_sequence_similarity": sequence_similarity,
         "ast_node_count_similarity": node_count_similarity,
         "ast_depth_similarity": depth_similarity,
         "tree_edit_distance": edit_distance,
         "tree_edit_similarity": edit_similarity,
-        "apted_available": "si" if apted_distance is not None else "no",
-        "apted_tree_edit_distance": apted_distance if apted_distance is not None else "",
-        "apted_tree_edit_similarity": apted_similarity if apted_similarity is not None else "",
+        "shared_subtree_coverage": subtree_coverage,
         "structural_score": structural_score,
     }
 
@@ -313,15 +318,11 @@ def print_structural_report(results: dict[str, Any]) -> None:
     """Print a compact report for Layer-2 structural metrics."""
     print("=== Capa 2: Similitud estructural basada en AST ===")
     print(f"- AST node type Jaccard: {results['ast_node_type_jaccard']:.4f}")
-    print(f"- AST sequence similarity: {results['ast_sequence_similarity']:.4f}")
     print(f"- AST node count similarity: {results['ast_node_count_similarity']:.4f}")
     print(f"- AST depth similarity: {results['ast_depth_similarity']:.4f}")
     print(f"- Tree Edit Distance: {results['tree_edit_distance']}")
     print(f"- Tree Edit similarity: {results['tree_edit_similarity']:.4f}")
-    print(f"- APTED available: {results['apted_available']}")
-    if results["apted_available"] == "si":
-        print(f"- APTED Tree Edit Distance: {results['apted_tree_edit_distance']}")
-        print(f"- APTED Tree Edit similarity: {results['apted_tree_edit_similarity']:.4f}")
+    print(f"- Shared subtree coverage: {results['shared_subtree_coverage']:.4f}")
     print(f"- Structural score: {results['structural_score']:.4f}")
 
 

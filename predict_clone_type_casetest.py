@@ -7,13 +7,17 @@ from pathlib import Path
 import pandas as pd
 from joblib import load
 
+from code_length import MIN_CODE_LINES, count_logical_lines
 from embeddings import analyze_embedding_similarity
 from lexical_statistical_layer import analyze_lexical_statistical_similarity, preprocess_code
 from semantic_layer import analyze_semantic_similarity
 from structural_layer import analyze_structural_similarity
 from string_prefilter import analyze_string_prefilter
 
+ABSTAIN_LABEL = -1
+
 CLONE_TYPE_DESCRIPTIONS = {
+    ABSTAIN_LABEL: "Demasiado corto para clasificar con confianza - revision humana",
     0: "No clone / distinto",
     1: "Copy-paste / copia directa",
     2: "Renamed / reformateado",
@@ -92,11 +96,10 @@ def compute_features(code_a: str, code_b: str) -> dict[str, float]:
         "markov_similarity": float_or_zero(lexical_results.get("markov_similarity", 0.0)),
         "kl_similarity": float_or_zero(lexical_results.get("kl_similarity", 0.0)),
         "ast_node_type_jaccard": float_or_zero(structural_results.get("ast_node_type_jaccard", 0.0)),
-        "ast_sequence_similarity": float_or_zero(structural_results.get("ast_sequence_similarity", 0.0)),
         "ast_node_count_similarity": float_or_zero(structural_results.get("ast_node_count_similarity", 0.0)),
         "ast_depth_similarity": float_or_zero(structural_results.get("ast_depth_similarity", 0.0)),
         "tree_edit_similarity": float_or_zero(structural_results.get("tree_edit_similarity", 0.0)),
-        "apted_tree_edit_similarity": float_or_zero(structural_results.get("apted_tree_edit_similarity", 0.0)),
+        "shared_subtree_coverage": float_or_zero(structural_results.get("shared_subtree_coverage", 0.0)),
         "semantic_successful_overlap": float_or_zero(semantic_results.get("successful_overlap", 0.0)),
         "semantic_output_similarity": float_or_zero(semantic_results.get("output_similarity", 0.0)),
         "embedding_cosine_similarity": float_or_zero(embedding_results.get("embedding_cosine_similarity", 0.0)),
@@ -119,18 +122,32 @@ def build_prediction_rows(
         code_a = file_a_path.read_text(encoding="utf-8")
         code_b = file_b_path.read_text(encoding="utf-8")
 
+        lines_a = count_logical_lines(code_a)
+        lines_b = count_logical_lines(code_b)
+
         feature_values = compute_features(code_a, code_b)
         feature_row = {name: feature_values.get(name, 0.0) for name in features}
-        X = pd.DataFrame([feature_row], columns=features)
 
-        prediction = model.predict(X)[0]
+        if lines_a < MIN_CODE_LINES or lines_b < MIN_CODE_LINES:
+            prediction = ABSTAIN_LABEL
+            description = (
+                f"{CLONE_TYPE_DESCRIPTIONS[ABSTAIN_LABEL]} "
+                f"(a={lines_a}, b={lines_b} < {MIN_CODE_LINES} lineas)"
+            )
+        else:
+            X = pd.DataFrame([feature_row], columns=features)
+            prediction = int(model.predict(X)[0])
+            description = CLONE_TYPE_DESCRIPTIONS.get(prediction, "Desconocido")
+
         rows.append(
             {
                 "pair_dir": pair_dir.name,
                 "file_a": str(file_a_path),
                 "file_b": str(file_b_path),
-                "predicted_clone_type": int(prediction),
-                "description": CLONE_TYPE_DESCRIPTIONS.get(int(prediction), "Desconocido"),
+                "lines_a": lines_a,
+                "lines_b": lines_b,
+                "predicted_clone_type": prediction,
+                "description": description,
                 **feature_row,
             }
         )

@@ -11,11 +11,10 @@
 
 # Capa 2 - Structural
 - ast_node_type_jaccard
-- ast_sequence_similarity
 - ast_node_count_similarity
 - ast_depth_similarity
 - tree_edit_similarity
-- apted_tree_edit_similarity
+- shared_subtree_coverage
 
 # Capa 3 - Semantical
 - semantic_output_similarity
