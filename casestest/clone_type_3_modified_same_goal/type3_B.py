@@ -1,13 +1,23 @@
-def obtener_maximo(lista):
-    lista_ordenada = sorted(lista)
-    return lista_ordenada[-1]
+def aplicar_descuento(monto):
+    if monto <= 1000:
+        return monto
+    return monto * 0.90
 
 
-def main():
-    datos = [4, 12, 7, 25, 9]
-    maximo = obtener_maximo(datos)
-    print("Mayor:", maximo)
+def calcular_pago(items):
+    subtotal = sum(
+        item["precio"] * item["cantidad"]
+        for item in items
+    )
+
+    return aplicar_descuento(subtotal)
 
 
-if __name__ == "__main__":
-    main()
+items = [
+    {"precio": 200, "cantidad": 2},
+    {"precio": 150, "cantidad": 3},
+    {"precio": 500, "cantidad": 1}
+]
+
+resultado = calcular_pago(items)
+print(resultado)

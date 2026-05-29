@@ -1,17 +1,21 @@
-def buscar_mayor(numeros):
-    mayor = numeros[0]
+def calcular_total_productos(productos):
+    total = 0
 
-    for numero in numeros:
-        if numero > mayor:
-            mayor = numero
+    for producto in productos:
+        precio = producto["precio"]
+        cantidad = producto["cantidad"]
+        total += precio * cantidad
 
-    return mayor
+    if total > 1000:
+        total = total * 0.90
+
+    return total
 
 
-def main():
-    valores = [4, 12, 7, 25, 9]
-    print("Mayor:", buscar_mayor(valores))
+productos = [
+    {"precio": 200, "cantidad": 2},
+    {"precio": 150, "cantidad": 3},
+    {"precio": 500, "cantidad": 1}
+]
 
-
-if __name__ == "__main__":
-    main()
+print(calcular_total_productos(productos))

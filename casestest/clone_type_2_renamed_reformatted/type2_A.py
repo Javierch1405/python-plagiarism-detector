@@ -1,19 +1,22 @@
-def contar_vocales(texto):
-    vocales = "aeiouAEIOU"
-    contador = 0
+def calcular_total_productos(productos):
+    total = 0
 
-    for letra in texto:
-        if letra in vocales:
-            contador += 1
+    for producto in productos:
+        precio = producto["precio"]
+        cantidad = producto["cantidad"]
+        total += precio * cantidad
 
-    return contador
+    if total > 1000:
+        descuento = total * 0.10
+        total = total - descuento
 
-
-def main():
-    frase = "Programacion en Python"
-    total = contar_vocales(frase)
-    print("Vocales encontradas:", total)
+    return total
 
 
-if __name__ == "__main__":
-    main()
+productos = [
+    {"precio": 200, "cantidad": 2},
+    {"precio": 150, "cantidad": 3},
+    {"precio": 500, "cantidad": 1}
+]
+
+print(calcular_total_productos(productos))
