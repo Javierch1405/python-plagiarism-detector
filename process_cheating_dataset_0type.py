@@ -133,13 +133,25 @@ def run(
     dataset_rows = parse_dataset_csv(input_csv)
     results: list[dict[str, Any]] = []
 
-    for row in dataset_rows:
+    total = len(dataset_rows)
+    if total == 0:
+        print("No hay filas en el CSV de entrada.")
+        export_to_csv(results, output_csv)
+        return
+
+    last_percent = -1
+    for idx, row in enumerate(dataset_rows, start=1):
         file_a = row["file_a"]
         file_b = row["file_b"]
         label = int(row["label"]) if row["label"].isdigit() else 0
         clone_type = int(row["clone_type"]) if row["clone_type"].isdigit() else 0
 
         if only_plagiarized and label != 1:
+            # Still count it as processed for progress reporting
+            percent = int((idx / total) * 100)
+            if percent != last_percent or idx == total:
+                print(f"Procesado {idx}/{total} ({percent}%)", flush=True)
+                last_percent = percent
             continue
 
         try:
@@ -174,6 +186,11 @@ def run(
             )
 
         results.append(result_row)
+
+        percent = int((idx / total) * 100)
+        if percent != last_percent or idx == total:
+            print(f"Procesado {idx}/{total} ({percent}%)", flush=True)
+            last_percent = percent
 
     export_to_csv(results, output_csv)
     print(f"Exportado {len(results)} filas a {output_csv}")

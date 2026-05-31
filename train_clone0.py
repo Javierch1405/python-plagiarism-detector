@@ -57,8 +57,22 @@ from sklearn.svm import LinearSVC
 
 TARGET_COL = "clone_type"
 
+# Limpieza conservadora para quitar negativos que parecen clones demasiado similares.
+# Se aplica solo a clone_type = 0, que es donde mas ruido introducen los pares
+# casi duplicados que confunden la frontera con la clase 3.
+SIMILARITY_CLEANING_COLUMNS = [
+    "string_similarity_ratio",
+    "jaccard_similarity",
+    "tfidf_cosine_similarity",
+    "ast_node_type_jaccard",
+    "embedding_cosine_similarity",
+    "semantic_successful_overlap",
+]
+MIN_CLEANING_COLUMNS = 4
+NEGATIVE_SIMILARITY_THRESHOLD = 0.74
+
 # Columnas que normalmente NO conviene usar como features porque identifican archivos,
-# etiquetas o informacion que podria causar fuga de informacion.
+# etiquetas o infojrmacion que podria causar fuga de informacion.
 DEFAULT_EXCLUDE_COLS = {
     "clone_type",
     "label",
@@ -178,6 +192,22 @@ def to_json_safe(obj: Any) -> Any:
     return obj
 
 
+def build_similarity_score(df: pd.DataFrame) -> pd.Series:
+    """Calcula una puntuacion compuesta para detectar negativos demasiado similares."""
+
+    available_columns = [col for col in SIMILARITY_CLEANING_COLUMNS if col in df.columns]
+    if len(available_columns) < MIN_CLEANING_COLUMNS:
+        return pd.Series(np.nan, index=df.index, dtype=float)
+
+    score_frame = df[available_columns].apply(pd.to_numeric, errors="coerce")
+    score = score_frame.mean(axis=1)
+
+    # Evita puntuar filas que solo tienen una o dos metricas disponibles.
+    valid_counts = score_frame.notna().sum(axis=1)
+    score = score.where(valid_counts >= MIN_CLEANING_COLUMNS)
+    return score
+
+
 def load_dataset(csv_path: str | Path) -> Tuple[pd.DataFrame, pd.Series, pd.DataFrame]:
     """
     Lee el CSV, prepara X/y y devuelve tambien el dataframe original.
@@ -188,6 +218,8 @@ def load_dataset(csv_path: str | Path) -> Tuple[pd.DataFrame, pd.Series, pd.Data
         - Convierte 4 -> 0, por consistencia con el CSV nuevo.
         - Usa como features columnas numericas y booleanas.
         - Excluye columnas identificadoras y de etiqueta.
+                - Elimina pares negativos muy similares que no aportan señal y confunden
+                    la separacion entre clone_type 0 y 3.
     """
     csv_path = Path(csv_path)
 
@@ -217,6 +249,20 @@ def load_dataset(csv_path: str | Path) -> Tuple[pd.DataFrame, pd.Series, pd.Data
     # IMPORTANTE: en esta version el clone_type 0 se queda como 0.
     # No hacemos conversiones especiales de 4 -> 0; conservamos los valores tal cual.
     y = y_original.astype(int)
+
+    similarity_score = build_similarity_score(df)
+    noisy_negative_mask = (y == 0) & similarity_score.notna() & (similarity_score >= NEGATIVE_SIMILARITY_THRESHOLD)
+    removed_rows = int(noisy_negative_mask.sum())
+
+    if removed_rows > 0:
+        print(
+            "Limpieza del dataset: se eliminaron "
+            f"{removed_rows} pares clone_type=0 con similitud alta "
+            f"(score >= {NEGATIVE_SIMILARITY_THRESHOLD:.2f})."
+        )
+        df = df.loc[~noisy_negative_mask].copy()
+        y = y.loc[~noisy_negative_mask].copy()
+        y_original = y_original.loc[~noisy_negative_mask].copy()
 
     # Seleccion de features: numericas y booleanas, excluyendo identificadores/target.
     candidate_cols = []
@@ -284,7 +330,7 @@ def build_preprocessors(feature_names: list[str]) -> Tuple[ColumnTransformer, Co
     return scaled_preprocessor, unscaled_preprocessor
 
 
-def build_models(feature_names: list[str], random_state: int = 42) -> Dict[str, Pipeline]:
+def build_models(feature_names: list[str], random_state: int = 42, class_weight_map: dict | None = None) -> Dict[str, Pipeline]:
     """Construye los modelos disponibles."""
 
     scaled_preprocessor, unscaled_preprocessor = build_preprocessors(feature_names)
@@ -296,7 +342,7 @@ def build_models(feature_names: list[str], random_state: int = 42) -> Dict[str, 
                 (
                     "model",
                     LinearSVC(
-                        class_weight="balanced",
+                        class_weight=class_weight_map if class_weight_map is not None else "balanced",
                         C=1.0,
                         max_iter=50000,
                         random_state=random_state,
@@ -310,7 +356,7 @@ def build_models(feature_names: list[str], random_state: int = 42) -> Dict[str, 
                 (
                     "model",
                     LogisticRegression(
-                        class_weight="balanced",
+                        class_weight=class_weight_map if class_weight_map is not None else "balanced",
                         max_iter=5000,
                         random_state=random_state,
                     ),
@@ -324,7 +370,7 @@ def build_models(feature_names: list[str], random_state: int = 42) -> Dict[str, 
                     "model",
                     RandomForestClassifier(
                         n_estimators=200,
-                        class_weight="balanced",
+                        class_weight=class_weight_map if class_weight_map is not None else "balanced",
                         max_depth=None,
                         min_samples_leaf=2,
                         random_state=random_state,
@@ -465,6 +511,34 @@ def evaluate_model(
     report_path = output_dir / f"{model_name}_clone_type_report.json"
     with report_path.open("w", encoding="utf-8") as f:
         json.dump(to_json_safe(results), f, indent=2, ensure_ascii=False)
+
+    cv_predictions = cross_val_predict(
+        model,
+        X,
+        y,
+        cv=cv,
+        groups=groups if isinstance(cv, GroupKFold) else None,
+    )
+    cv_report = classification_report(
+        y,
+        cv_predictions,
+        labels=labels,
+        output_dict=True,
+        zero_division=0,
+    )
+
+    class_0_precision = float(cv_report.get("0", {}).get("precision", 0.0))
+    class_3_recall = float(cv_report.get("3", {}).get("recall", 0.0))
+    priority_score = (class_0_precision + class_3_recall) / 2.0
+
+    results["cv"]["class_0_precision"] = class_0_precision
+    results["cv"]["class_3_recall"] = class_3_recall
+    results["cv"]["priority_score"] = priority_score
+
+    print(
+        f"Prioridad clase 0/3: precision_0={class_0_precision:.3f}, "
+        f"recall_3={class_3_recall:.3f}, score={priority_score:.3f}"
+    )
 
     return results
 
@@ -703,11 +777,14 @@ def save_model_comparison_csv(comparison: dict, output_dir: Path) -> Path:
                 "cv_balanced_accuracy_std": result["cv"]["balanced_accuracy_std"],
                 "cv_f1_macro_mean": result["cv"]["f1_macro_mean"],
                 "cv_f1_macro_std": result["cv"]["f1_macro_std"],
+                "cv_class_0_precision": result["cv"].get("class_0_precision", 0.0),
+                "cv_class_3_recall": result["cv"].get("class_3_recall", 0.0),
+                "cv_priority_score": result["cv"].get("priority_score", 0.0),
             }
         )
 
     comparison_df = pd.DataFrame(rows).sort_values(
-        by="cv_f1_macro_mean",
+        by="cv_priority_score",
         ascending=False,
     )
 
@@ -762,6 +839,13 @@ def parse_args() -> argparse.Namespace:
         help="Numero de features importantes por clase para LinearSVC.",
     )
 
+    parser.add_argument(
+        "--class3-weight",
+        type=float,
+        default=1.0,
+        help="Peso multiplicador para la clase 3 en class_weight (ej: 2.0).",
+    )
+
     return parser.parse_args()
 
 
@@ -773,7 +857,20 @@ def main() -> None:
 
     X, y, original_df = load_dataset(args.csv)
     groups = get_pair_group_ids(original_df)
-    models = build_models(feature_names=list(X.columns), random_state=args.random_state)
+
+    # Construir mapa de pesos por clase si el usuario pide mayor peso para clase 3.
+    class_weight_map = None
+    if args.class3_weight != 1.0:
+        unique_labels = sorted(y.unique().tolist())
+        # Default 1.0 para todas las clases, luego ajustar 3 si existe.
+        class_weight_map = {int(lbl): 1.0 for lbl in unique_labels}
+        if 3 in class_weight_map:
+            class_weight_map[3] = float(args.class3_weight)
+        else:
+            # Si la etiqueta 3 no existe en y, no hacer nada especial.
+            class_weight_map = None
+
+    models = build_models(feature_names=list(X.columns), random_state=args.random_state, class_weight_map=class_weight_map)
 
     if args.compare:
         models_to_run = models
@@ -794,15 +891,20 @@ def main() -> None:
         )
         comparison[model_name] = result
 
-    # Elegir mejor modelo por F1 macro CV.
+    # Elegir mejor modelo por una prioridad compuesta:
+    # precision de la clase 0 y recall de la clase 3.
     best_model_name = max(
         comparison,
-        key=lambda name: comparison[name]["cv"]["f1_macro_mean"],
+        key=lambda name: comparison[name]["cv"].get("priority_score", 0.0),
     )
 
     print("\n" + "#" * 80)
-    print(f"Mejor modelo por F1 macro en CV: {best_model_name}")
-    print(f"F1 macro CV: {comparison[best_model_name]['cv']['f1_macro_mean']:.3f}")
+    print(f"Mejor modelo por precision clase 0 / recall clase 3: {best_model_name}")
+    print(
+        f"Score prioridad CV: {comparison[best_model_name]['cv'].get('priority_score', 0.0):.3f} "
+        f"(precision_0={comparison[best_model_name]['cv'].get('class_0_precision', 0.0):.3f}, "
+        f"recall_3={comparison[best_model_name]['cv'].get('class_3_recall', 0.0):.3f})"
+    )
     print("#" * 80)
 
     # Entrenar el mejor modelo con TODO el dataset para guardarlo como modelo final.
