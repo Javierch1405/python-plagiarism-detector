@@ -1,0 +1,115 @@
+{
+  "model_name": "logistic_regression",
+  "n_rows": 369,
+  "n_features": 15,
+  "features": [
+    "string_similarity_ratio",
+    "jaccard_similarity",
+    "tfidf_cosine_similarity",
+    "entropy_difference",
+    "markov_similarity",
+    "kl_similarity",
+    "ast_node_type_jaccard",
+    "ast_sequence_similarity",
+    "ast_node_count_similarity",
+    "ast_depth_similarity",
+    "tree_edit_similarity",
+    "apted_tree_edit_similarity",
+    "semantic_successful_overlap",
+    "semantic_output_similarity",
+    "embedding_cosine_similarity"
+  ],
+  "class_distribution_after_mapping": {
+    "1": 59,
+    "2": 67,
+    "3": 243
+  },
+  "holdout": {
+    "accuracy": 0.967741935483871,
+    "balanced_accuracy": 0.983606557377049,
+    "classification_report": {
+      "1": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1-score": 1.0,
+        "support": 15.0
+      },
+      "2": {
+        "precision": 0.85,
+        "recall": 1.0,
+        "f1-score": 0.918918918918919,
+        "support": 17.0
+      },
+      "3": {
+        "precision": 1.0,
+        "recall": 0.9508196721311475,
+        "f1-score": 0.9747899159663865,
+        "support": 61.0
+      },
+      "accuracy": 0.967741935483871,
+      "macro avg": {
+        "precision": 0.9500000000000001,
+        "recall": 0.983606557377049,
+        "f1-score": 0.9645696116284351,
+        "support": 93.0
+      },
+      "weighted avg": {
+        "precision": 0.9725806451612904,
+        "recall": 0.967741935483871,
+        "f1-score": 0.9686430805975398,
+        "support": 93.0
+      }
+    },
+    "confusion_matrix": [
+      [
+        15,
+        0,
+        0
+      ],
+      [
+        0,
+        17,
+        0
+      ],
+      [
+        0,
+        3,
+        58
+      ]
+    ],
+    "labels_order": [
+      1,
+      2,
+      3
+    ]
+  },
+  "cv": {
+    "accuracy_mean": 0.9567197334320621,
+    "accuracy_std": 0.03350690657922357,
+    "balanced_accuracy_mean": 0.9705542473399615,
+    "balanced_accuracy_std": 0.031639100905443654,
+    "f1_macro_mean": 0.9499896703268316,
+    "f1_macro_std": 0.04149674105937567,
+    "accuracy_by_fold": [
+      0.8918918918918919,
+      0.972972972972973,
+      0.972972972972973,
+      0.9594594594594594,
+      0.9863013698630136
+    ],
+    "balanced_accuracy_by_fold": [
+      0.9079016221873365,
+      0.9863945578231292,
+      0.9861111111111112,
+      0.9791666666666666,
+      0.9931972789115647
+    ],
+    "f1_macro_by_fold": [
+      0.8688095985092649,
+      0.9692460317460317,
+      0.9706855791962176,
+      0.956989247311828,
+      0.9842178948708158
+    ]
+  }
+}

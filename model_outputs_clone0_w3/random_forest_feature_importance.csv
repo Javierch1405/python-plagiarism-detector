@@ -1,0 +1,16 @@
+﻿feature,importance
+embedding_cosine_similarity,0.20678285802201526
+string_similarity_ratio,0.18467070322783552
+ast_sequence_similarity,0.08949554024203138
+apted_tree_edit_similarity,0.08789384226185572
+tree_edit_similarity,0.08360363688101907
+kl_similarity,0.06590410397816827
+tfidf_cosine_similarity,0.056176686524372896
+markov_similarity,0.04285858864309579
+semantic_output_similarity,0.03873223907113841
+entropy_difference,0.037538746535759136
+semantic_successful_overlap,0.030485268042294397
+jaccard_similarity,0.027290646880720967
+ast_node_type_jaccard,0.023230400593333242
+ast_node_count_similarity,0.020778403064679943
+ast_depth_similarity,0.004558336031679945

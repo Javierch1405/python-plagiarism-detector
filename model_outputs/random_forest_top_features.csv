@@ -1,0 +1,16 @@
+﻿feature,importance
+string_similarity_ratio,0.20771435211398662
+string_exact_match,0.09748550292549275
+structural_score,0.07942586584870708
+tree_edit_distance,0.0786497109700635
+ast_sequence_similarity,0.0704659905879334
+tree_edit_similarity,0.056028176146348946
+markov_similarity,0.054440110832109735
+ast_node_count_similarity,0.037373068240093094
+embedding_feature_count,0.03621482171570552
+kl_divergence_a_to_b,0.03330950074001103
+semantic_matching_return_count,0.026203255334868385
+lexical_statistical_score,0.02581609384568992
+semantic_score,0.02340898661720977
+semantic_output_similarity,0.022848920633110715
+tfidf_cosine_similarity,0.022201076345070042
