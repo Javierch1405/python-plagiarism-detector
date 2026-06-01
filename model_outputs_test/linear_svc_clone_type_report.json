@@ -1,0 +1,115 @@
+{
+  "model_name": "linear_svc",
+  "n_rows": 369,
+  "n_features": 15,
+  "features": [
+    "string_similarity_ratio",
+    "jaccard_similarity",
+    "tfidf_cosine_similarity",
+    "entropy_difference",
+    "markov_similarity",
+    "kl_similarity",
+    "ast_node_type_jaccard",
+    "ast_sequence_similarity",
+    "ast_node_count_similarity",
+    "ast_depth_similarity",
+    "tree_edit_similarity",
+    "apted_tree_edit_similarity",
+    "semantic_successful_overlap",
+    "semantic_output_similarity",
+    "embedding_cosine_similarity"
+  ],
+  "class_distribution_after_mapping": {
+    "1": 59,
+    "2": 67,
+    "3": 243
+  },
+  "holdout": {
+    "accuracy": 0.967741935483871,
+    "balanced_accuracy": 0.9694631951141112,
+    "classification_report": {
+      "1": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1-score": 1.0,
+        "support": 15.0
+      },
+      "2": {
+        "precision": 0.8888888888888888,
+        "recall": 0.9411764705882353,
+        "f1-score": 0.9142857142857143,
+        "support": 17.0
+      },
+      "3": {
+        "precision": 0.9833333333333333,
+        "recall": 0.9672131147540983,
+        "f1-score": 0.9752066115702479,
+        "support": 61.0
+      },
+      "accuracy": 0.967741935483871,
+      "macro avg": {
+        "precision": 0.9574074074074074,
+        "recall": 0.9694631951141112,
+        "f1-score": 0.963164108618654,
+        "support": 93.0
+      },
+      "weighted avg": {
+        "precision": 0.9687574671445638,
+        "recall": 0.967741935483871,
+        "f1-score": 0.9680694671897017,
+        "support": 93.0
+      }
+    },
+    "confusion_matrix": [
+      [
+        15,
+        0,
+        0
+      ],
+      [
+        0,
+        16,
+        1
+      ],
+      [
+        0,
+        2,
+        59
+      ]
+    ],
+    "labels_order": [
+      1,
+      2,
+      3
+    ]
+  },
+  "cv": {
+    "accuracy_mean": 0.959422436134765,
+    "accuracy_std": 0.022568259903141378,
+    "balanced_accuracy_mean": 0.964745770102913,
+    "balanced_accuracy_std": 0.013487982629114216,
+    "f1_macro_mean": 0.9536598840934225,
+    "f1_macro_std": 0.026105132250774078,
+    "accuracy_by_fold": [
+      0.918918918918919,
+      0.972972972972973,
+      0.9594594594594594,
+      0.9594594594594594,
+      0.9863013698630136
+    ],
+    "balanced_accuracy_by_fold": [
+      0.9403453689167974,
+      0.967556253270539,
+      0.9623015873015873,
+      0.9791666666666666,
+      0.9743589743589745
+    ],
+    "f1_macro_by_fold": [
+      0.9054633309952459,
+      0.967556253270539,
+      0.9549909255898367,
+      0.956989247311828,
+      0.9832996632996633
+    ]
+  }
+}
