@@ -14,7 +14,7 @@ Codigo A y Codigo B
     -> Probabilidad de plagio
 ```
 
-En esta etapa estan implementadas una Capa 0 de preprocesamiento y prefiltro de strings para detectar clones Type-1 casi exactos, una Capa 1 lexico-estadistica, una Capa 2 estructural basada en AST y una primera Capa 3 experimental. La Capa 3 puede arrancar con embeddings de codigo y similitud coseno como aproximacion semantica inicial, mientras que en una evolucion posterior puede incorporar ejecucion controlada de funciones. La Capa 2 ya incluye una version simple de Tree Edit Distance ordenada y soporte para APTED mediante dependencia externa. No se implementan todavia modelos semanticos pesados, redes neuronales ni clasificador final.
+ En esta etapa estan implementadas una Capa 0 de preprocesamiento y prefiltro de strings para detectar clones Type-1 casi exactos, una Capa 1 lexico-estadistica, una Capa 2 estructural basada en AST y una Capa 3 semántica. La Capa 3 se implementa actualmente con embeddings de código y similitud coseno como aproximación semántica; la Capa 3 no ejecuta código ni realiza análisis comportamental. La Capa 2 ya incluye una version simple de Tree Edit Distance ordenada y soporte para APTED mediante dependencia externa. No se implementan todavia modelos semanticos pesados, redes neuronales ni clasificador final.
 
 ## Archivos principales
 
@@ -24,24 +24,19 @@ Contiene el motor del analizador. Es el archivo donde viven las funciones reutil
 
 - limpieza basica del codigo,
 - tokenizacion,
-- normalizacion de tokens,
 - calculo de metricas lexicas y estadisticas,
 - comparacion de patrones de transicion,
 - fusion inicial del score de Capa 1.
-
 ### `string_prefilter.py`
 
 Contiene la Capa 0 de preprocesamiento y prefiltro de strings. Su objetivo es limpiar el codigo y descartar muy rapido copias casi exactas antes de pasar a las capas mas costosas.
 
-Esta capa:
 
 - preprocesa el codigo eliminando comentarios, docstrings y whitespaces innecesarios,
 - normaliza el texto resultante para comparacion,
-- compara igualdad exacta tras normalizacion,
 - calcula un ratio de similitud basado en `SequenceMatcher`,
 - marca pares como duplicados cercanos cuando superan un umbral.
 
-### `embeddings.py`
 
 Contiene una primera version de la Capa 3 basada en embeddings ligeros de TF-IDF.
 
@@ -52,7 +47,6 @@ Esta capa:
 - compara ambos fragmentos con similitud coseno,
 - devuelve un `embedding_score` reutilizable como aproximacion semantica inicial.
 
-### `test.py`
 
 Es el campo de pruebas del proyecto. No contiene la logica principal del analizador; importa las funciones de `lexical_statistical_layer.py` y ejecuta varios casos comparativos.
 
@@ -96,20 +90,17 @@ Puede exportar:
 
 Por defecto oculta nombres concretos de identificadores y literales para enfocarse en la estructura.
 
-### `semantic_layer.py`
+ ### `semantic_layer.py`
 
-Contiene una version experimental de analisis semantico por comportamiento.
+ Contiene la implementacion de la Capa 3 (Semántica), basada en embeddings y similitud.
 
-Esta capa:
+ Esta capa:
 
-- detecta la primera funcion definida en cada fragmento,
-- elige una aridad comparable,
-- genera inputs controlados,
-- ejecuta ambas funciones en subprocess con timeout,
-- compara salidas y excepciones,
-- calcula `semantic_score`.
+ - transforma el codigo limpio en representaciones vectoriales (embeddings) usando TF-IDF u otros modelos ligeros,
+ - calcula similitud coseno entre embeddings de ambos fragmentos,
+ - devuelve un `embedding_score` / `semantic_score` que representa la similitud semántica.
 
-Esta version convive con la capa de embeddings, que sirve como primer aproximador semantico barato antes de ejecutar codigo. La version de comportamiento no usa modelos pesados ni ejecuta el codigo dentro del proceso principal.
+ Importante: la Capa 3 NO ejecuta codigo ni realiza analisis comportamental; cualquier mención previa a ejecucion controlada de funciones ha sido retirada.
 
 ### `results/`
 
@@ -134,6 +125,50 @@ Para verificar sintaxis:
 python -m py_compile lexical_statistical_layer.py structural_layer.py semantic_layer.py ast_visualizer.py test.py
 ```
 
+### Procesar, entrenar y ejecutar casos de prueba
+
+Instrucciones reproducibles para las tareas principales (procesamiento, entrenamiento y predicción):
+
+- Procesar el dataset y generar las métricas por par (features):
+
+```bash
+python process_dataset.py
+```
+
+Por defecto `process_dataset.py` usa `cheating_dataset_clean.csv` como entrada, `cases/` para los archivos fuente y escribe `results/dataset_result.csv`.
+Para cambiar input/output sin modificar el archivo, puedes ejecutar desde Python:
+
+```bash
+python -c "from pathlib import Path; from process_dataset import run; run(Path('mi_input.csv'), Path('results/mi_output.csv'), Path('cases'))"
+```
+
+- Entrenar modelos a partir del CSV generado:
+
+```bash
+python train_model.py --csv results/dataset_result.csv --compare --output-dir model_outputs
+```
+
+Flags opcionales comunes para `train_model.py`:
+
+- `--csv PATH` : ruta al CSV de features (por defecto `results/dataset_result.csv`).
+- `--output-dir DIR` : directorio donde se guardan modelos y artefactos (por defecto `model_outputs`).
+- `--compare` : activa el modo de comparación entre modelos durante el proceso de entrenamiento.
+
+- Ejecutar predicciones sobre los `casestest` con un modelo entrenado:
+
+```bash
+python predict_clone_type_casetest.py \
+    --model-path model_outputs/logistic_regression_clone_type_model.joblib \
+    --features-path model_outputs/logistic_regression_features.json
+```
+
+Flags opcionales para `predict_clone_type_casetest.py`:
+
+- `--model-path PATH` : ruta al archivo joblib del modelo entrenado.
+- `--features-path PATH` : ruta al JSON con la lista de features usadas por el modelo.
+
+Estos comandos permiten reproducir el flujo: generar features desde el CSV original, entrenar modelos y luego ejecutar predicciones sobre los casos de prueba.
+
 Si no se instala `apted`, el proyecto sigue corriendo con la distancia estructural interna como fallback, pero las columnas APTED indicaran que no esta disponible.
 
 ## Flujo del analizador
@@ -145,8 +180,7 @@ Codigo A y Codigo B
     -> Capa 0: preprocess_code -> similarity_ratio -> descarte temprano de clones Type-1
         -> Capa 1: tokenize_code -> normalize_tokens -> metricas lexicas/estadisticas -> lexical_statistical_score
         -> Capa 2: parse_python_ast -> metricas estructurales AST -> structural_score
-        -> Capa 3: embeddings TF-IDF -> similitud coseno -> embedding_score
-        -> Capa 3 experimental: ejecucion controlada de funciones -> semantic_score
+         -> Capa 3: embeddings TF-IDF -> similitud coseno -> semantic_score
 ```
 
 Diagrama detallado del flujo de ejecucion:
@@ -207,11 +241,9 @@ flowchart TD
     end
 
     subgraph semantica
-        fnInfo --> arity
-        arity --> inputs
-        inputs --> exec
-        exec --> compare
-        compare --> semanticScore
+        vecA[gen_embeddings_A] --> cosine
+        vecB[gen_embeddings_B] --> cosine
+        cosine --> semanticScore
     end
 
     lexicalScore --> row
@@ -247,7 +279,7 @@ La separacion es importante:
 - En el flujo integrado de `test.py`, `run_layers_once` ejecuta el preprocesamiento una sola vez por par de codigos y entrega ese codigo limpio a las capas.
 - `normalize_tokens` pertenece a la Capa 1 porque afecta directamente las metricas de similitud.
 - `parse_python_ast` pertenece a la Capa 2 porque ya analiza estructura sintactica, no solo tokens.
-- `analyze_semantic_similarity` pertenece a la Capa 3 porque compara comportamiento observable con inputs de prueba.
+ - `analyze_semantic_similarity` pertenece a la Capa 3 porque compara representaciones semánticas (embeddings) entre fragmentos.
 
 ## Documentacion de funciones
 
