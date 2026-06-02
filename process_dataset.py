@@ -28,7 +28,7 @@ PROJECT_ROOT = SCRIPT_DIR
 DEFAULT_CASES_DIR = PROJECT_ROOT / "cases"
 DEFAULT_INPUT_CSV = PROJECT_ROOT / "cheating_dataset_clean.csv"
 TEST_INPUT_CSV = PROJECT_ROOT / "test_input.csv"
-DEFAULT_OUTPUT_CSV = PROJECT_ROOT / "results" / "cheating_dataset_results_with_label0.csv"
+DEFAULT_OUTPUT_CSV = PROJECT_ROOT / "results" / "dataset_result.csv"
 
 
 def parse_dataset_csv(csv_path: Path) -> list[dict[str, str]]:
@@ -128,7 +128,6 @@ def run(
     input_csv: Path,
     output_csv: Path,
     cases_dir: Path,
-    only_plagiarized: bool,
 ) -> None:
     dataset_rows = parse_dataset_csv(input_csv)
     results: list[dict[str, Any]] = []
@@ -145,14 +144,6 @@ def run(
         file_b = row["file_b"]
         label = int(row["label"]) if row["label"].isdigit() else 0
         clone_type = int(row["clone_type"]) if row["clone_type"].isdigit() else 0
-
-        if only_plagiarized and label != 1:
-            # Still count it as processed for progress reporting
-            percent = int((idx / total) * 100)
-            if percent != last_percent or idx == total:
-                print(f"Procesado {idx}/{total} ({percent}%)", flush=True)
-                last_percent = percent
-            continue
 
         try:
             lexical_results, structural_results, semantic_results, embedding_results, string_results = compute_metrics_for_pair(
@@ -196,18 +187,9 @@ def run(
     print(f"Exportado {len(results)} filas a {output_csv}")
 
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Procesa cheating_dataset_clean.csv y exporta métricas de plagio.")
-    parser.add_argument("--input-csv", type=Path, default=DEFAULT_INPUT_CSV, help="CSV de pares de código")
-    parser.add_argument("--output-csv", type=Path, default=DEFAULT_OUTPUT_CSV, help="CSV de salida con métricas")
-    parser.add_argument("--cases-dir", type=Path, default=DEFAULT_CASES_DIR, help="Directorio de archivos de código")
-    parser.add_argument("--only-plagiarized", action="store_true", help="Exporta solo los pares con label 1")
-    return parser.parse_args()
-
 
 def main() -> None:
-    args = parse_args()
-    run(args.input_csv, args.output_csv, args.cases_dir, args.only_plagiarized)
+    run(DEFAULT_INPUT_CSV, DEFAULT_OUTPUT_CSV, DEFAULT_CASES_DIR)
 
 
 if __name__ == "__main__":

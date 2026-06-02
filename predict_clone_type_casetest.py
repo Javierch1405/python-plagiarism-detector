@@ -1,3 +1,19 @@
+r"""
+Uso del script:
+
+    python predict_clone_type_casetest.py
+
+Opcionalmente puedes cambiar solo el modelo y las features con flags:
+
+    python predict_clone_type_casetest.py \
+        --model-path .\model_outputs\logistic_regression_clone_type_model.joblib \
+        --features-path .\model_outputs\logistic_regression_features.json
+
+Valores fijos del script:
+    - cases-dir: .\cases
+    - output-csv: results/casestest_clone_type_predictions_logistic.csv
+"""
+
 from __future__ import annotations
 
 import argparse
@@ -20,8 +36,8 @@ CLONE_TYPE_DESCRIPTIONS = {
     3: "Modificado mismo objetivo",
 }
 
-DEFAULT_MODEL_PATH = Path("model_outputs_clone0/random_forest_clone_type_model.joblib")
-DEFAULT_FEATURES_PATH = Path("model_outputs_clone0/random_forest_features.json")
+DEFAULT_MODEL_PATH = Path("model_outputs/logistic_regression_clone_type_model.joblib")
+DEFAULT_FEATURES_PATH = Path("model_outputs/logistic_regression_features.json")
 DEFAULT_CASES_DIR = Path("casestest")
 DEFAULT_OUTPUT_CSV = Path("results/casestest_clone_type_predictions.csv")
 
@@ -147,7 +163,7 @@ def save_predictions(rows: list[dict[str, object]], output_csv: Path) -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Predice clone_type para pares de código en casestest usando un modelo entrenado."
+        description="Predice clone_type para pares de codigo usando un modelo entrenado."
     )
     parser.add_argument(
         "--model-path",
@@ -161,24 +177,12 @@ def parse_args() -> argparse.Namespace:
         default=DEFAULT_FEATURES_PATH,
         help="Ruta al JSON con la lista de features usadas por el modelo.",
     )
-    parser.add_argument(
-        "--cases-dir",
-        type=Path,
-        default=DEFAULT_CASES_DIR,
-        help="Directorio que contiene los pares de prueba.",
-    )
-    parser.add_argument(
-        "--output-csv",
-        type=Path,
-        default=DEFAULT_OUTPUT_CSV,
-        help="Archivo CSV donde se guardan las predicciones.",
-    )
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
-    rows = build_prediction_rows(args.model_path, args.features_path, args.cases_dir)
+    rows = build_prediction_rows(args.model_path, args.features_path, DEFAULT_CASES_DIR)
     if not rows:
         print("No se encontraron pares para predecir.")
         return
@@ -189,7 +193,7 @@ def main() -> None:
             f"({row['description']})"
         )
 
-    save_predictions(rows, args.output_csv)
+    save_predictions(rows, DEFAULT_OUTPUT_CSV)
 
 
 if __name__ == "__main__":

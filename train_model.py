@@ -1,11 +1,11 @@
-"""
+r"""
 Entrena modelos para predecir clone_type a partir de metricas de similitud.
 
-Uso basico:
-    python train_clone_type_model_v8_keep_clone0.py --csv "results/cheating_dataset_results.csv"
+Uso:
+    python train_model.py
 
-Comparar modelos:
-    python train_clone_type_model_v8_keep_clone0.py --csv "results/cheating_dataset_results.csv" --compare
+Este script corre siempre con la configuracion equivalente a:
+    python train_model.py --csv .\results\dataset_result.csv --compare --output-dir model_outputs
 
 Modelos disponibles:
     - linear_svc
@@ -15,7 +15,6 @@ Modelos disponibles:
 Notas:
     - La columna objetivo es clone_type.
     - El clone_type 0 se conserva como clase 0.
-    - Si aparece clone_type 4, se convierte a 0 por consistencia con el CSV nuevo.
     - El CSV final de predicciones NO muestra clone_type_real_mapeado.
     - Se genera un CSV con predicciones por par.
     - Se generan CSVs con importancia de metricas/features.
@@ -23,7 +22,6 @@ Notas:
 
 from __future__ import annotations
 
-import argparse
 import json
 from pathlib import Path
 from typing import Dict, Tuple, Any
@@ -54,8 +52,17 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import LinearSVC
 
+SCRIPT_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = SCRIPT_DIR
+DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "model_outputs"
+DEFAULT_CSV = PROJECT_ROOT / "results" / "dataset_result.csv"
+DEFAULT_RANDOM_STATE = 42
+DEFAULT_TOP_N_FEATURES = 10
+DEFAULT_CLASS3_WEIGHT = 1.0
+DEFAULT_COMPARE_MODE = True
 
 TARGET_COL = "clone_type"
+
 
 # Limpieza conservadora para quitar negativos que parecen clones demasiado similares.
 # Se aplica solo a clone_type = 0, que es donde mas ruido introducen los pares
@@ -795,87 +802,32 @@ def save_model_comparison_csv(comparison: dict, output_dir: Path) -> Path:
     return output_path
 
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Entrena modelos para predecir clone_type."
-    )
-
-    parser.add_argument(
-        "--csv",
-        required=True,
-        help="Ruta al CSV. Ejemplo: results/cheating_dataset_results.csv",
-    )
-
-    parser.add_argument(
-        "--model",
-        default="linear_svc",
-        choices=["linear_svc", "logistic_regression", "random_forest"],
-        help="Modelo a entrenar si no usas --compare.",
-    )
-
-    parser.add_argument(
-        "--compare",
-        action="store_true",
-        help="Evalua y compara linear_svc, logistic_regression y random_forest.",
-    )
-
-    parser.add_argument(
-        "--output-dir",
-        default="model_outputs",
-        help="Carpeta donde se guardan modelos, reportes y CSVs.",
-    )
-
-    parser.add_argument(
-        "--random-state",
-        type=int,
-        default=42,
-        help="Semilla para reproducibilidad.",
-    )
-
-    parser.add_argument(
-        "--top-n-features",
-        type=int,
-        default=10,
-        help="Numero de features importantes por clase para LinearSVC.",
-    )
-
-    parser.add_argument(
-        "--class3-weight",
-        type=float,
-        default=1.0,
-        help="Peso multiplicador para la clase 3 en class_weight (ej: 2.0).",
-    )
-
-    return parser.parse_args()
-
-
 def main() -> None:
-    args = parse_args()
-
-    output_dir = Path(args.output_dir)
+    output_dir = Path(DEFAULT_OUTPUT_DIR)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    X, y, original_df = load_dataset(args.csv)
+    X, y, original_df = load_dataset(DEFAULT_CSV)
     groups = get_pair_group_ids(original_df)
 
     # Construir mapa de pesos por clase si el usuario pide mayor peso para clase 3.
     class_weight_map = None
-    if args.class3_weight != 1.0:
+    if DEFAULT_CLASS3_WEIGHT != 1.0:
         unique_labels = sorted(y.unique().tolist())
         # Default 1.0 para todas las clases, luego ajustar 3 si existe.
         class_weight_map = {int(lbl): 1.0 for lbl in unique_labels}
         if 3 in class_weight_map:
-            class_weight_map[3] = float(args.class3_weight)
+            class_weight_map[3] = float(DEFAULT_CLASS3_WEIGHT)
         else:
             # Si la etiqueta 3 no existe en y, no hacer nada especial.
             class_weight_map = None
 
-    models = build_models(feature_names=list(X.columns), random_state=args.random_state, class_weight_map=class_weight_map)
+    models = build_models(
+        feature_names=list(X.columns),
+        random_state=DEFAULT_RANDOM_STATE,
+        class_weight_map=class_weight_map,
+    )
 
-    if args.compare:
-        models_to_run = models
-    else:
-        models_to_run = {args.model: models[args.model]}
+    models_to_run = models if DEFAULT_COMPARE_MODE else {"linear_svc": models["linear_svc"]}
 
     comparison = {}
 
@@ -887,7 +839,7 @@ def main() -> None:
             y=y,
             output_dir=output_dir,
             groups=groups,
-            random_state=args.random_state,
+            random_state=DEFAULT_RANDOM_STATE,
         )
         comparison[model_name] = result
 
@@ -934,7 +886,7 @@ def main() -> None:
         original_df=original_df,
         output_dir=output_dir,
         groups=groups,
-        random_state=args.random_state,
+        random_state=DEFAULT_RANDOM_STATE,
     )
 
     # Guardar errores CV del mejor modelo.
@@ -946,7 +898,7 @@ def main() -> None:
         original_df=original_df,
         output_dir=output_dir,
         groups=groups,
-        random_state=args.random_state,
+        random_state=DEFAULT_RANDOM_STATE,
     )
 
     # Guardar importancia de metricas/features para modelos interpretables.
@@ -957,7 +909,7 @@ def main() -> None:
         fitted_model=linear_model,
         X=X,
         output_dir=output_dir,
-        top_n=args.top_n_features,
+        top_n=DEFAULT_TOP_N_FEATURES,
     )
 
     # Random Forest: importancia global.
@@ -967,7 +919,7 @@ def main() -> None:
         fitted_model=rf_model,
         X=X,
         output_dir=output_dir,
-        top_n=max(args.top_n_features, 15),
+        top_n=max(DEFAULT_TOP_N_FEATURES, 15),
     )
 
     print("\nArchivos guardados:")
