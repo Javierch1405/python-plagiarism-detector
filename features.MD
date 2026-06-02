@@ -18,6 +18,4 @@
 - apted_tree_edit_similarity
 
 # Capa 3 - Semantical
-- semantic_output_similarity
-- semantic_successful_overlap
 - embedding_cosine_similarity

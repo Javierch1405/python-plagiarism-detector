@@ -19,7 +19,6 @@ from typing import Any
 
 from embeddings import analyze_embedding_similarity
 from lexical_statistical_layer import analyze_lexical_statistical_similarity, preprocess_code
-from semantic_layer import analyze_semantic_similarity
 from structural_layer import analyze_structural_similarity
 from string_prefilter import analyze_string_prefilter
 
@@ -65,7 +64,6 @@ def build_metric_row(
     clone_type: int,
     lexical_results: dict[str, Any],
     structural_results: dict[str, Any],
-    semantic_results: dict[str, Any],
     embedding_results: dict[str, Any],
     string_results: dict[str, Any],
     error: str = "",
@@ -89,13 +87,11 @@ def build_metric_row(
         "ast_depth_similarity": float(structural_results.get("ast_depth_similarity", 0.0)),
         "tree_edit_similarity": float(structural_results.get("tree_edit_similarity", 0.0)),
         "apted_tree_edit_similarity": structural_results.get("apted_tree_edit_similarity", ""),
-        "semantic_successful_overlap": float(semantic_results.get("successful_overlap", 0.0)),
-        "semantic_output_similarity": float(semantic_results.get("output_similarity", 0.0)),
         "embedding_cosine_similarity": float(embedding_results.get("embedding_cosine_similarity", 0.0)),
     }
 
 
-def compute_metrics_for_pair(cases_dir: Path, file_a: str, file_b: str) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any]]:
+def compute_metrics_for_pair(cases_dir: Path, file_a: str, file_b: str) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any]]:
     code_a = load_source_file(cases_dir, file_a)
     code_b = load_source_file(cases_dir, file_b)
 
@@ -104,11 +100,10 @@ def compute_metrics_for_pair(cases_dir: Path, file_a: str, file_b: str) -> tuple
 
     lexical_results = analyze_lexical_statistical_similarity(clean_a, clean_b, preprocessed=True)
     structural_results = analyze_structural_similarity(clean_a, clean_b, preprocessed=True)
-    semantic_results = analyze_semantic_similarity(clean_a, clean_b, preprocessed=True)
     embedding_results = analyze_embedding_similarity(clean_a, clean_b, preprocessed=True)
     string_results = analyze_string_prefilter(clean_a, clean_b, threshold=0.95, preprocessed=True)
 
-    return lexical_results, structural_results, semantic_results, embedding_results, string_results
+    return lexical_results, structural_results, embedding_results, string_results
 
 
 def export_to_csv(rows: list[dict[str, Any]], output_path: Path) -> None:
@@ -146,7 +141,7 @@ def run(
         clone_type = int(row["clone_type"]) if row["clone_type"].isdigit() else 0
 
         try:
-            lexical_results, structural_results, semantic_results, embedding_results, string_results = compute_metrics_for_pair(
+            lexical_results, structural_results, embedding_results, string_results = compute_metrics_for_pair(
                 cases_dir,
                 file_a,
                 file_b,
@@ -158,7 +153,6 @@ def run(
                 clone_type,
                 lexical_results,
                 structural_results,
-                semantic_results,
                 embedding_results,
                 string_results,
             )
@@ -168,7 +162,6 @@ def run(
                 file_b,
                 label,
                 clone_type,
-                {},
                 {},
                 {},
                 {},

@@ -29,7 +29,6 @@ from typing import Dict, Tuple, Any
 import numpy as np
 import pandas as pd
 from joblib import dump
-
 from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.impute import SimpleImputer
@@ -60,6 +59,7 @@ DEFAULT_RANDOM_STATE = 42
 DEFAULT_TOP_N_FEATURES = 10
 DEFAULT_CLASS3_WEIGHT = 1.0
 DEFAULT_COMPARE_MODE = True
+DEFAULT_STABILITY_PENALTY = 0.5
 
 TARGET_COL = "clone_type"
 
@@ -73,10 +73,9 @@ SIMILARITY_CLEANING_COLUMNS = [
     "tfidf_cosine_similarity",
     "ast_node_type_jaccard",
     "embedding_cosine_similarity",
-    "semantic_successful_overlap",
 ]
 MIN_CLEANING_COLUMNS = 4
-NEGATIVE_SIMILARITY_THRESHOLD = 0.74
+NEGATIVE_SIMILARITY_THRESHOLD = 0.79
 
 # Columnas que normalmente NO conviene usar como features porque identifican archivos,
 # etiquetas o infojrmacion que podria causar fuga de informacion.
@@ -787,11 +786,15 @@ def save_model_comparison_csv(comparison: dict, output_dir: Path) -> Path:
                 "cv_class_0_precision": result["cv"].get("class_0_precision", 0.0),
                 "cv_class_3_recall": result["cv"].get("class_3_recall", 0.0),
                 "cv_priority_score": result["cv"].get("priority_score", 0.0),
+                "cv_priority_minus_std": (
+                    result["cv"].get("priority_score", 0.0)
+                    - (DEFAULT_STABILITY_PENALTY * result["cv"]["f1_macro_std"])
+                ),
             }
         )
 
     comparison_df = pd.DataFrame(rows).sort_values(
-        by="cv_priority_score",
+        by="cv_priority_minus_std",
         ascending=False,
     )
 
@@ -843,17 +846,21 @@ def main() -> None:
         )
         comparison[model_name] = result
 
-    # Elegir mejor modelo por una prioridad compuesta:
-    # precision de la clase 0 y recall de la clase 3.
+    # Elegir mejor modelo por prioridad 0/3 penalizada por variabilidad CV
+    # para reducir riesgo de sobreajuste.
     best_model_name = max(
         comparison,
-        key=lambda name: comparison[name]["cv"].get("priority_score", 0.0),
+        key=lambda name: (
+            comparison[name]["cv"].get("priority_score", 0.0)
+            - (DEFAULT_STABILITY_PENALTY * comparison[name]["cv"].get("f1_macro_std", 0.0))
+        ),
     )
 
     print("\n" + "#" * 80)
-    print(f"Mejor modelo por precision clase 0 / recall clase 3: {best_model_name}")
+    print(f"Mejor modelo por prioridad 0/3 con penalizacion de inestabilidad: {best_model_name}")
     print(
         f"Score prioridad CV: {comparison[best_model_name]['cv'].get('priority_score', 0.0):.3f} "
+        f"| score penalizado: {comparison[best_model_name]['cv'].get('priority_score', 0.0) - (DEFAULT_STABILITY_PENALTY * comparison[best_model_name]['cv'].get('f1_macro_std', 0.0)):.3f} "
         f"(precision_0={comparison[best_model_name]['cv'].get('class_0_precision', 0.0):.3f}, "
         f"recall_3={comparison[best_model_name]['cv'].get('class_3_recall', 0.0):.3f})"
     )

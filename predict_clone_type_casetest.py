@@ -6,12 +6,12 @@ Uso del script:
 Opcionalmente puedes cambiar solo el modelo y las features con flags:
 
     python predict_clone_type_casetest.py \
-        --model-path .\model_outputs\logistic_regression_clone_type_model.joblib \
-        --features-path .\model_outputs\logistic_regression_features.json
+        --model-path .\model_outputs\best_clone_type_model.joblib \
+        --features-path .\model_outputs\best_features.json
 
 Valores fijos del script:
-    - cases-dir: .\cases
-    - output-csv: results/casestest_clone_type_predictions_logistic.csv
+    - cases-dir: .\casestest
+    - output-csv: results/casestest_clone_type_predictions.csv
 """
 
 from __future__ import annotations
@@ -25,7 +25,6 @@ from joblib import load
 
 from embeddings import analyze_embedding_similarity
 from lexical_statistical_layer import analyze_lexical_statistical_similarity, preprocess_code
-from semantic_layer import analyze_semantic_similarity
 from structural_layer import analyze_structural_similarity
 from string_prefilter import analyze_string_prefilter
 
@@ -36,8 +35,8 @@ CLONE_TYPE_DESCRIPTIONS = {
     3: "Modificado mismo objetivo",
 }
 
-DEFAULT_MODEL_PATH = Path("model_outputs/logistic_regression_clone_type_model.joblib")
-DEFAULT_FEATURES_PATH = Path("model_outputs/logistic_regression_features.json")
+DEFAULT_MODEL_PATH = Path("model_outputs/best_clone_type_model.joblib")
+DEFAULT_FEATURES_PATH = Path("model_outputs/best_features.json")
 DEFAULT_CASES_DIR = Path("casestest")
 DEFAULT_OUTPUT_CSV = Path("results/casestest_clone_type_predictions.csv")
 
@@ -90,7 +89,6 @@ def compute_features(code_a: str, code_b: str) -> dict[str, float]:
 
     lexical_results = analyze_lexical_statistical_similarity(clean_a, clean_b, preprocessed=True)
     structural_results = analyze_structural_similarity(clean_a, clean_b, preprocessed=True)
-    semantic_results = analyze_semantic_similarity(clean_a, clean_b, preprocessed=True)
     embedding_results = analyze_embedding_similarity(clean_a, clean_b, preprocessed=True)
     string_results = analyze_string_prefilter(clean_a, clean_b, threshold=0.95, preprocessed=True)
 
@@ -113,8 +111,6 @@ def compute_features(code_a: str, code_b: str) -> dict[str, float]:
         "ast_depth_similarity": float_or_zero(structural_results.get("ast_depth_similarity", 0.0)),
         "tree_edit_similarity": float_or_zero(structural_results.get("tree_edit_similarity", 0.0)),
         "apted_tree_edit_similarity": float_or_zero(structural_results.get("apted_tree_edit_similarity", 0.0)),
-        "semantic_successful_overlap": float_or_zero(semantic_results.get("successful_overlap", 0.0)),
-        "semantic_output_similarity": float_or_zero(semantic_results.get("output_similarity", 0.0)),
         "embedding_cosine_similarity": float_or_zero(embedding_results.get("embedding_cosine_similarity", 0.0)),
     }
 
