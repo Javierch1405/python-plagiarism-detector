@@ -1,4 +1,0 @@
-﻿row_index,file_a,file_b,label,clone_type_original,linear_svc_pred,linear_svc_acerto
-44,submission113.py,submission115.py,1,0,2,False
-154,submission283.py,submission284.py,1,3,2,False
-166,submission307.py,submission308.py,1,3,1,False
