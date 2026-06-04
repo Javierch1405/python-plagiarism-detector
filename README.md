@@ -106,24 +106,6 @@ Por defecto oculta nombres concretos de identificadores y literales para enfocar
 
 Carpeta para guardar salidas de pruebas y resultados exportados.
 
-## Como ejecutar
-
-Desde la carpeta del proyecto:
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements.txt
-python test.py
-```
-
-Esto ejecuta todos los casos definidos en `TEST_CASES`, imprime un reporte compacto y genera los CSV.
-
-Para verificar sintaxis:
-
-```bash
-python -m py_compile lexical_statistical_layer.py structural_layer.py semantic_layer.py ast_visualizer.py test.py
-```
 
 ### Procesar, entrenar y ejecutar casos de prueba
 
@@ -136,16 +118,11 @@ python process_dataset.py
 ```
 
 Por defecto `process_dataset.py` usa `cheating_dataset_clean.csv` como entrada, `cases/` para los archivos fuente y escribe `results/dataset_result.csv`.
-Para cambiar input/output sin modificar el archivo, puedes ejecutar desde Python:
-
-```bash
-python -c "from pathlib import Path; from process_dataset import run; run(Path('mi_input.csv'), Path('results/mi_output.csv'), Path('cases'))"
-```
 
 - Entrenar modelos a partir del CSV generado:
 
 ```bash
-python train_model.py --csv results/dataset_result.csv --compare --output-dir model_outputs
+python train_model.py
 ```
 
 Flags opcionales comunes para `train_model.py`:
@@ -157,9 +134,7 @@ Flags opcionales comunes para `train_model.py`:
 - Ejecutar predicciones sobre los `casestest` con un modelo entrenado:
 
 ```bash
-python predict_clone_type_casetest.py \
-    --model-path model_outputs/logistic_regression_clone_type_model.joblib \
-    --features-path model_outputs/logistic_regression_features.json
+python predict_clone_type_casetest.py 
 ```
 
 Flags opcionales para `predict_clone_type_casetest.py`:
@@ -168,8 +143,6 @@ Flags opcionales para `predict_clone_type_casetest.py`:
 - `--features-path PATH` : ruta al JSON con la lista de features usadas por el modelo.
 
 Estos comandos permiten reproducir el flujo: generar features desde el CSV original, entrenar modelos y luego ejecutar predicciones sobre los casos de prueba.
-
-Si no se instala `apted`, el proyecto sigue corriendo con la distancia estructural interna como fallback, pero las columnas APTED indicaran que no esta disponible.
 
 ## Flujo del analizador
 
