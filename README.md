@@ -16,6 +16,56 @@ Codigo A y Codigo B
 
  En esta etapa estan implementadas una Capa 0 de preprocesamiento y prefiltro de strings para detectar clones Type-1 casi exactos, una Capa 1 lexico-estadistica, una Capa 2 estructural basada en AST y una Capa 3 semántica. La Capa 3 se implementa actualmente con embeddings de código y similitud coseno como aproximación semántica; la Capa 3 no ejecuta código ni realiza análisis comportamental. La Capa 2 ya incluye una version simple de Tree Edit Distance ordenada y soporte para APTED mediante dependencia externa. No se implementan todavia modelos semanticos pesados, redes neuronales ni clasificador final.
 
+
+# Cómo Ejecutar:
+
+### Procesar, entrenar y ejecutar casos de prueba
+
+Instrucciones reproducibles para las tareas principales (procesamiento, entrenamiento y predicción):
+
+Antes de ejecutar cualquier script, crea un archivo `.env` en la raíz del proyecto con la variable `OPENAI_API_KEY`, ya que la capa semántica la necesita para generar embeddings. 
+
+> [!NOTE]
+> Es necesario tener una API Key configurada para procesar correctamente el dataset, pero se puede entrenar y probar el modelo con los outputs pre-generados en este repo.
+
+```env
+OPENAI_API_KEY=tu_clave_aqui
+```
+
+- Procesar el dataset y generar las métricas por par (features):
+
+```bash
+python process_dataset.py
+```
+
+Por defecto `process_dataset.py` usa `cheating_dataset_clean.csv` como entrada, `cases/` para los archivos fuente y escribe `results/dataset_result.csv`.
+
+- Entrenar modelos a partir del CSV generado:
+
+```bash
+python train_model.py
+```
+
+Flags opcionales comunes para `train_model.py`:
+
+- `--csv PATH` : ruta al CSV de features (por defecto `results/dataset_result.csv`).
+- `--output-dir DIR` : directorio donde se guardan modelos y artefactos (por defecto `model_outputs`).
+- `--compare` : activa el modo de comparación entre modelos durante el proceso de entrenamiento.
+
+- Ejecutar predicciones sobre los `casestest` con un modelo entrenado:
+
+```bash
+python predict_clone_type_casetest.py 
+```
+
+Flags opcionales para `predict_clone_type_casetest.py`:
+
+- `--model-path PATH` : ruta al archivo joblib del modelo entrenado.
+- `--features-path PATH` : ruta al JSON con la lista de features usadas por el modelo.
+
+Estos comandos permiten reproducir el flujo: generar features desde el CSV original, entrenar modelos y luego ejecutar predicciones sobre los casos de prueba.
+
+
 ## Archivos principales
 
 ### `lexical_statistical_layer.py`
@@ -106,43 +156,6 @@ Por defecto oculta nombres concretos de identificadores y literales para enfocar
 
 Carpeta para guardar salidas de pruebas y resultados exportados.
 
-
-### Procesar, entrenar y ejecutar casos de prueba
-
-Instrucciones reproducibles para las tareas principales (procesamiento, entrenamiento y predicción):
-
-- Procesar el dataset y generar las métricas por par (features):
-
-```bash
-python process_dataset.py
-```
-
-Por defecto `process_dataset.py` usa `cheating_dataset_clean.csv` como entrada, `cases/` para los archivos fuente y escribe `results/dataset_result.csv`.
-
-- Entrenar modelos a partir del CSV generado:
-
-```bash
-python train_model.py
-```
-
-Flags opcionales comunes para `train_model.py`:
-
-- `--csv PATH` : ruta al CSV de features (por defecto `results/dataset_result.csv`).
-- `--output-dir DIR` : directorio donde se guardan modelos y artefactos (por defecto `model_outputs`).
-- `--compare` : activa el modo de comparación entre modelos durante el proceso de entrenamiento.
-
-- Ejecutar predicciones sobre los `casestest` con un modelo entrenado:
-
-```bash
-python predict_clone_type_casetest.py 
-```
-
-Flags opcionales para `predict_clone_type_casetest.py`:
-
-- `--model-path PATH` : ruta al archivo joblib del modelo entrenado.
-- `--features-path PATH` : ruta al JSON con la lista de features usadas por el modelo.
-
-Estos comandos permiten reproducir el flujo: generar features desde el CSV original, entrenar modelos y luego ejecutar predicciones sobre los casos de prueba.
 
 ## Flujo del analizador
 
